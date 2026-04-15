@@ -9,4 +9,5 @@ toi_data/
 *final_mdwarf_params.csv
 test/.ipynb_checkpoints/
 test/.trash.txt
-
+data/dr2_dr3_ticid_final.parquet
+data/dr2_dr3_ticid_final.csv
