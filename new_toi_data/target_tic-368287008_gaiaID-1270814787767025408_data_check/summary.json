@@ -1,0 +1,25 @@
+{
+  "_schema": {
+    "name": "summary",
+    "version": "1.0.0"
+  },
+  "target_id": "TIC 368287008",
+  "status": "converged",
+  "counts": {
+    "n_candidates_total": 6,
+    "n_fit_attempts": 1,
+    "n_converged": 1
+  },
+  "runtime_sec": 1322.5402734279633,
+  "fits": [
+    {
+      "planet_name": 6,
+      "ptype": "Period",
+      "t0": 1966.078,
+      "period": 0.67,
+      "snr": 730.571,
+      "converged": true,
+      "conv_on_run": true
+    }
+  ]
+}

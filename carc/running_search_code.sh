@@ -7,7 +7,7 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --time=45:00:00
-#SBATCH --mem-per-cpu=8GB
+#SBATCH --mem-per-cpu=5GB
 #SBATCH --partition=general
 #SBATCH --mail-user malharris19@unm.edu 
 #SBATCH --mail-type BEGIN

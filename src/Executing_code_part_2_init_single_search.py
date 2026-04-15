@@ -113,7 +113,7 @@ def main(target):
 #     print('running first search!!!!')
     
     gc.collect()
-    singles_df = singles_search(ticid, total_file_path[0], intransit = [], catalog_df = catalog_df, confidence = 0.5)   
+    singles_df, sparams_df = singles_search(ticid, total_file_path[0], intransit = [], catalog_df = catalog_df, confidence = 0.5)   
     if len(singles_df)>0:
         os.rename(target, target+'_check')
         print('keeping this ticid: ', ticid)
@@ -140,14 +140,16 @@ if __name__ == "__main__":
 
     time1 = tm.time()
     
-    target_files = sorted(glob.glob('../new_toi_data/target_*data'))
+    target_files = sorted(glob.glob('../new_toi_data/target_*'))
+    print('number of files: ', len(target_files), 'file number: ', file_num)
     file = target_files[file_num]
 #     print('factor: ', file_factor, ', running files_nums:', file_factor*8 , '-', min(len(target_files), (file_factor+1)*8))
 #     pool = mpl.Pool()
+    if 'data' in file.split('/')[-1]:
     
     
     
-    main(file) 
+        main(file) 
 
 #         factor_files_max = min(len(target_files), (file_factor+1)*8)
 #         factor_files_min = file_factor*8

@@ -1,0 +1,106 @@
+{
+  "_schema": {
+    "name": "summary",
+    "version": "1.0.0"
+  },
+  "target_id": "TIC 201177276",
+  "status": "converged",
+  "counts": {
+    "n_candidates_total": 18,
+    "n_fit_attempts": 10,
+    "n_converged": 10
+  },
+  "runtime_sec": 8469.528746128082,
+  "fits": [
+    {
+      "planet_name": 2,
+      "ptype": "Period",
+      "t0": 1334.556,
+      "period": 13.395,
+      "snr": 1288.736,
+      "converged": true,
+      "conv_on_run": true
+    },
+    {
+      "planet_name": 4,
+      "ptype": "Period",
+      "t0": 1342.657,
+      "period": 18.171,
+      "snr": 2093.988,
+      "converged": true,
+      "conv_on_run": true
+    },
+    {
+      "planet_name": 6,
+      "ptype": "Period",
+      "t0": 2062.097,
+      "period": 1.231,
+      "snr": 2098.67,
+      "converged": true,
+      "conv_on_run": true
+    },
+    {
+      "planet_name": 9,
+      "ptype": "Single",
+      "t0": 1351.455,
+      "period": 785.058,
+      "snr": 23.96,
+      "converged": true,
+      "conv_on_run": true
+    },
+    {
+      "planet_name": 13,
+      "ptype": "Single",
+      "t0": 2089.709,
+      "period": 783.783,
+      "snr": 42.748,
+      "converged": true,
+      "conv_on_run": true
+    },
+    {
+      "planet_name": 14,
+      "ptype": "Single",
+      "t0": 1364.032,
+      "period": 785.167,
+      "snr": 5.237,
+      "converged": true,
+      "conv_on_run": true
+    },
+    {
+      "planet_name": 15,
+      "ptype": "Single",
+      "t0": 1361.854,
+      "period": 784.813,
+      "snr": 2.484,
+      "converged": true,
+      "conv_on_run": true
+    },
+    {
+      "planet_name": 17,
+      "ptype": "Single",
+      "t0": 1359.727,
+      "period": 784.897,
+      "snr": 2.026,
+      "converged": true,
+      "conv_on_run": true
+    },
+    {
+      "planet_name": 19,
+      "ptype": "Single",
+      "t0": 1373.369,
+      "period": 784.66,
+      "snr": 22.705,
+      "converged": true,
+      "conv_on_run": true
+    },
+    {
+      "planet_name": 20,
+      "ptype": "Period",
+      "t0": 1346.241,
+      "period": 1.008,
+      "snr": 1607.683,
+      "converged": true,
+      "conv_on_run": true
+    }
+  ]
+}

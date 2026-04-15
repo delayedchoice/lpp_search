@@ -60,6 +60,8 @@ from pytensor.graph import Op, Apply
 from pytensor import config as pt_config
 
 
+from typing import List, Dict, Any, Tuple, Optional, Iterable
+
 # import eleanor
 
 import warnings
@@ -692,7 +694,7 @@ def running_median(data, kernel=25):
     
     idx = np.arange(kernel) + np.arange(len(data) - kernel + 1)[:, None]
     idx = idx.astype(np.int64)  # needed if oversamplinfg_factor is not int
-    med = np.median(data[idx], axis=1)
+    med = np.nanmedian(data[idx], axis=1)
 
     # Append the first/last value at the beginning/end to match the length of
     # data and returned median
@@ -777,58 +779,165 @@ def check_multiples(arr):
 
 
 
-def checking_BLS_periodicity(per, period_array, t0, t0_array):
-    factors = np.array(period_array)/per
-    print('factors',np.round(factors, 5))
-    factor_indxs = np.where(np.logical_or(np.abs(factors - np.rint(factors))<0.03, np.abs(1/factors - np.rint(1/np.array(factors)))<0.03))[0]
+# def checking_BLS_periodicity(per, period_array, t0, t0_array):
+#     factors = np.array(period_array)/per
+#     print('factors',np.round(factors, 5))
+#     factor_indxs = np.where(np.logical_or(np.abs(factors - np.rint(factors))<0.03, np.abs(1/factors - np.rint(1/np.array(factors)))<0.03))[0]
+    
+#     print('factor indexes', factor_indxs)
 
+#     pop_per = np.nan
+#     pop_per_indx = np.nan
+
+#     keep_factor = 1
+# #     if 1. in np.round(factors, 7):
+# #         keep_factor = -1E5
+# #         print('its 1')
+
+# #         return per, keep_factor
+#     rep_indxs = np.where(np.rint(factors[factor_indxs])==1.)[0]     
+# #     print('indexes of repeated periods', rep_indxs)
+#     new_period = per
+#     not1_indxs = np.where(np.rint(factors[factor_indxs])!=1.)
+#     if len(rep_indxs)>0:
+#         keep_factor = -1
+#         val = 0
+#         while (1. in np.round(period_array/new_period, 1) and val<len(period_array)+1):
+#             val+=1                    
+#             new_periods = catching_periods_repeated_and_offset(new_period,t0, np.array(period_array), np.array(t0_array), rep_indxs)
+#             if len(new_periods)> 1:
+#                 new_period  = min(new_periods)
+#                 keep_factor = abs(per/new_period)
+
+#                 pop_per = per
+                
+#                 pop_per_indxs = np.where(np.array(period_array)==pop_per)[0]
+
+#                 if len(pop_per_indxs)>0:
+#                     pop_per_indx = pop_per_indxs[0]
+#                 else:
+#                     pop_per = np.nan
+#                     keep_factor = -1
+                    
+                
+#             elif (len(new_periods) == 1) and (new_periods[0] == per):
+#                 keep_factor = -1E5
+                
+
+#         if val>len(period_array):
+#             keep_factor = -2
+    
+
+#     elif len(not1_indxs[0])>0:
+        
+#         factors_not1 = factors[not1_indxs]
+# #         factors_not1[factors_not1>1] = 1.
+
+#         factors_not1 = np.unique(factors_not1)
+        
+#         keep_factor = max(1/factors_not1)
+
+        
+#         #note: the following line is assuming that generally the min period is the true period, and multiples are aliases. This allows us to run MCMC on fewer periods. However, if the true period is the longer one, we're in trouble
+
+#         if keep_factor<1:
+
+#             pop_per = float(np.unique(np.array(period_array)[np.where(factors == 1/keep_factor)])[0])
+#             if pop_per>0:
+#                 pop_per_indx = np.where(np.array(period_array)==pop_per)[0][0]
+                
+#         else:
+#             keep_factor = -1*keep_factor
+
+
+#     if pop_per_indx != np.nan:
+#         print('popping index: ', pop_per_indx, ' or period ', pop_per, 'from periods: ', period_array)
+# #     print('what exactly are these? ', pop_per_indx, pop_per)
+    
+#     print('final of periodicity check; period: ', new_period, ' keep factor', keep_factor)
+#     return new_period, keep_factor, pop_per, pop_per_indx
+        
+
+
+# ---------- tiny primitives ----------
+
+def _near_integer(x: float, tol: float = 0.03) -> Tuple[bool, Optional[int]]:
+    k = int(np.rint(x))
+    if np.isfinite(x) and abs(x - k) <= tol:
+        return True, k
+    return False, None
+
+def _nearest_epoch_to_time(t_target: float, T0: float, P: float) -> float:
+    n = int(np.rint((t_target - T0) / P))
+    return T0 + n * P
+
+def _offset_to_ephemeris(t_target: float, T0: float, P: float) -> float:
+    return abs(t_target - _nearest_epoch_to_time(t_target, T0, P))
+
+def _index_of_period(periods: Iterable[float], p: float, rel_tol: float = 1e-3) -> Optional[int]:
+    arr = np.asarray(list(periods), dtype=float)
+    if arr.size == 0:
+        return None
+    diffs = np.abs(arr - p) / np.maximum(arr, 1e-12)
+    i = int(np.argmin(diffs))
+    return i if diffs[i] <= rel_tol else None
+
+def checking_BLS_periodicity(
+    per, period_array, t0, t0_array,
+    ratio_tol=0.03, epoch_tol_perc=0.05, rel_tol=1e-3,
+    min_period=0.25, max_period=None
+):
+    """
+    Compare a new candidate (per, t0) against existing (period_array, t0_array).
+    Returns (new_period, keep_factor, pop_per, pop_per_indx) with same semantics as before.
+    """
+    periods = list(map(float, period_array))
+    t0s     = list(map(float, t0_array))
+
+    new_period = float(per)
+    keep_factor = 1.0
     pop_per = np.nan
+    pop_per_indx = np.nan
 
-    keep_factor = 1
-#     if 1. in np.round(factors, 7):
-#         keep_factor = -1E5
-#         print('its 1')
+    for i, (p_old, t0_old) in enumerate(zip(periods, t0s)):
+        r = p_old / per
+        rel1, k1 = _near_integer(r, tol=ratio_tol)       # p_old ~ k1 * per
+        rel2, k2 = _near_integer(1.0 / r, tol=ratio_tol) # per   ~ k2 * p_old
+        if not (rel1 or rel2):
+            continue
 
-#         return per, keep_factor
-    rep_indxs = np.where(np.rint(factors[factor_indxs])==1.)[0]     
-#     print('indexes of repeated periods', rep_indxs)
-    new_period = per
-    not1_indxs = np.where(np.rint(factors[factor_indxs])!=1.)
-    if len(rep_indxs)>0:
-        keep_factor = -1
-        val = 0
-        while (1. in np.round(period_array/new_period, 1) and val<len(period_array)+1):
-            val+=1                    
-            new_period = catching_periods_repeated_and_offset(new_period,t0, np.array(period_array), np.array(t0_array), rep_indxs)
-            if len(new_period)>0:
-                new_period  = min(new_period)
-                keep_factor = abs(per/new_period)
-                pop_per = per
-                
-            elif new_period == per:
-                keep_factor = -1E5
-                
-
-        if val>len(period_array):
+        k = int(max(1, (k1 if rel1 else k2)))
+        if k == 1:
+            # exact repeat sentinel
             keep_factor = -2
-    
+        shorter = min(per, p_old)
+        new_is_shorter = (per <= p_old)
 
-    elif len(not1_indxs[0])>0:
-        
-        factors_not1 = factors[not1_indxs]
-#         factors_not1[factors_not1>1] = 1.
+        offset_old = _offset_to_ephemeris(t0, t0_old, p_old)
+        epoch_tol = max(epoch_tol_perc * shorter, 2.5/24)  # use shorter period scale for tolerance
+        aligned = (offset_old <= epoch_tol)
 
-        factors_not1 = np.unique(factors_not1)
-        
-        keep_factor = max(1/factors_not1)
-        
-        pop_per = float(set(np.array(period_array)[np.where(factors == 1/keep_factor)])[0])
-        #note: the following line is assuming that generally the min period is the true period, and multiples are aliases. This allows us to run MCMC on fewer periods. However, if the true period is the longer one, we're in trouble
-        new_period  = per
-    
-    print('final of periodicity check; period: ', new_period, ' keep factor', keep_factor)
-    return new_period, keep_factor, pop_per
-        
+        if aligned:
+            if new_is_shorter:
+                # Keep new, pop old
+                return float(per), (keep_factor + float(k)), float(p_old), i
+            # Reject new; keep existing shorter. Use shorter for masking.
+            return float(p_old), float(-k), pop_per, pop_per_indx
+
+        # Misaligned alias → try offset masking if offset behaves like a submultiple
+        if offset_old > 0:
+            r_off = min(p_old, per) / offset_old
+            rel1_, kx = _near_integer(r_off, tol=ratio_tol)
+            rel2_, ky = _near_integer(1.0 / r_off, tol=ratio_tol)
+            if (rel1_ or rel2_):
+                k_off = int(max(1, (kx if rel1_ else ky)))
+                if (offset_old < max(p_old, per) / 2) and (k_off <10):
+                    if ((min_period is None or offset_old >= min_period) and
+                        (max_period is None or offset_old <= max_period)):
+                        return float(offset_old), (keep_factor + 10.0), pop_per, pop_per_indx
+
+    # Novel period
+    return new_period, keep_factor, pop_per, pop_per_indx
 
 def checking_aliases_repeated_periodic_planets(per_ary, t0_ary, q_ary):
     final_indexs = np.full(len(per_ary), True)
@@ -893,8 +1002,8 @@ def catching_periods_repeated_and_offset(per, t0, per_array, t0_array, rep_indxs
         n = np.ceil(diff_tc[iii]/per)
         min_diff_tc = np.nanmin(np.abs(diff_tc[iii] - np.array([n-1, n, n+1])*per))
         
-        if round(min_diff_tc, 1) !=0:
-            frac_per = per/min_diff_tc
+        if np.rint(min_diff_tc) != 0.:
+#             frac_per = per/min_diff_tc
             new_periods.append(min_diff_tc)
         
         else: 
@@ -920,7 +1029,8 @@ def checking_last_BLS_power_for_artificial_inflation(power_results):
                 max_indx+=1
             else:
                 break
-    if max_indx == 0 or max_indx == len(power_results):
+    print('max indx', max_indx, ' len power results ', len(power_results))
+    if max_indx == 0 or max_indx >= len(power_results):
         return np.arange(len(power_results))
     else:        
         return np.arange(len(power_results)-max_indx)
@@ -1179,7 +1289,7 @@ def build_box_model(time, t0, duration, depth, period = -1):
 
 def using_BLS_recursive(time, flux, flux_err = None, intransit=None,
                             verbose=True, plot=True, max_planets=10,
-                            min_SNR=8, min_SDE = 10,
+                            min_SNR=7, min_SDE = 10,
                             periods=None, T0=None, Tdur=None, depths=None, first=False):
     """
     Recursive multi-planet search using GERBLS pyFastBLS + run_double and BIC/AIC-based model selection.
@@ -1219,12 +1329,14 @@ def using_BLS_recursive(time, flux, flux_err = None, intransit=None,
     my_median = running_median(results.power, kernel = min((25, int(len(time_new)/10))))
     
     
-#     print('my median', my_median)
     results['power_final'] = results.power - my_median
 
     check_pwr_final_indxs = checking_last_BLS_power_for_artificial_inflation(results['power_final'])
     index = np.argmax(results.power_final[check_pwr_final_indxs])
-
+#     print('my median ', my_median,  'my indexes ', len(check_pwr_final_indxs), 'power final ', results['power_final'])
+    
+    
+    
     period = results.period[index]
     t0 = results.transit_time[index]
     duration = results.duration[index]
@@ -1236,6 +1348,15 @@ def using_BLS_recursive(time, flux, flux_err = None, intransit=None,
 
     # Compute SDE
     mad = sst.median_abs_deviation(results['power_final'])
+    print('mad', mad)
+    if mad == 0.:
+        print('mad == 0: standard deviation is', np.std(results['power_final']), ', mad without running median is', sst.median_abs_deviation(results['power']))
+
+        mad = np.nanmax([
+            1e-5,
+            np.std(results['power_final']),
+            sst.median_abs_deviation(results['power'])
+        ])
     results['SNR'] =  results['power_final']/(mad/0.67)
     
     sde  = (results['power_final'][index] - np.mean(results['power_final'])) / np.std(results['power_final'])
@@ -1251,6 +1372,7 @@ def using_BLS_recursive(time, flux, flux_err = None, intransit=None,
 
 
     if plot: # and np.ceil(results.duration[index]/np.nanmedian(np.diff(time)))>=3:
+
         plt.figure(figsize = (10, 6))
         val_triangles = min(results.SNR)-np.std(results.SNR)
         ax = plt.gca()
@@ -1265,8 +1387,12 @@ def using_BLS_recursive(time, flux, flux_err = None, intransit=None,
 
         ax.plot(results.period, results.SNR, color = 'k', lw=0.65)
 
+        
+
         plt.show()
         plt.close()
+        
+
         if duration<period:
             plt.figure(figsize = (5, 5))
             ax2 = plt.gca()
@@ -1300,33 +1426,37 @@ def using_BLS_recursive(time, flux, flux_err = None, intransit=None,
             print('Stopping: SNR below threshold.')
         return np.array(periods), np.array(T0), np.array(Tdur), np.array(depths), intransit
 
+    single = False
+
     try:
         stats = model.compute_stats(period, duration, t0)
         print('number transit times in baseline:', len(stats["transit_times"][stats["per_transit_count"]>0]), ' \nnumber of point in each transit: ', stats["per_transit_count"][stats["per_transit_count"]>0], '\ntransit likelihood:', stats["per_transit_log_likelihood"][stats["per_transit_count"]>0])
+        transit_times_all = stats["transit_times"][np.where(stats["per_transit_count"]>0)[0]]
+        single = False
+        if len(transit_times_all)<2:
+            single = True
 
     except ValueError as err:
         print('getting error: ', err)
 
-    stats = model.compute_stats(period, duration, t0)
-    transit_times_all = stats["transit_times"][np.where(stats["per_transit_count"]>0)[0]]
-    single = False
-    if len(transit_times_all)<2:
-        single = True
 
     repeat = False
-    if len(periods)>0:# and len(factor_indxs)>0:
+    if (len(periods)>0) and (not single):# and len(factor_indxs)>0:
 
-        new_period, keep_factor, pop_per  = checking_BLS_periodicity(period, periods, t0, T0)
+        new_period, keep_factor, pop_per, pop_per_indx  = checking_BLS_periodicity(period, periods, t0, T0)
 
         if keep_factor>0:
             repeat=False
             intransit = np.logical_or(intransit, transit_mask(time, new_period, duration, t0))
             period = new_period  
-            if pop_per>0:
-                print(f'popping_period: {pop_per}, and keeping period {period}, as the old is {pop_per/period}x the new')
-                pop_indx = periods.index(pop_per)
+            if pop_per > 0:
+                print(f'popping_period: {pop_per} = {np.array(periods)[pop_per_indx]}, and keeping period {period}, as the old is {pop_per/period}x the new')
+#                 pop_indx = periods.index(pop_per)
                
-                periods.pop(pop_indx)
+                periods.pop(pop_per_indx)
+                T0.pop(pop_per_indx)
+                Tdur.pop(pop_per_indx)
+                depths.pop(pop_per_indx)
                 
         if keep_factor < -50 :
 
@@ -1399,7 +1529,7 @@ def fitting_periodic_planets(time, flux, flux_err, pers, t0s, depths, ab, intran
     depth    = []
     SNR_vals = []
     
-#     params_df   = []
+    params_df_all   = []
     
     if type(total_time) == bool:
         total_time = time
@@ -1410,19 +1540,24 @@ def fitting_periodic_planets(time, flux, flux_err, pers, t0s, depths, ab, intran
         if pers[iii]>0.25:
 
             params_df, conv, conv_attempt = pymc_new_general_function(time, flux, flux_err, t0s[iii], [pers[iii], ab, depths[iii]], 'Periodic')
+            
             if len(params_df)>0:
 
-                T0_, period_, depth_, tdur_, SNR = params_df.loc['t0', 'mean'], params_df.loc['Per', 'mean'], params_df.loc['depth', 'mean'], params_df.loc['dur', 'mean'], params_df.loc['SNR', 'mean']
-                print('params df', params_df)
+                params_df.loc[len(params_df)] = [None] * len(params_df.columns) 
 
-                print('checking convergence 1')
+                params_df_all.append(params_df)
+
+                T0_, period_, depth_, tdur_, SNR = params_df.loc['t0', 'mean'], params_df.loc['Per', 'mean'], params_df.loc['depth', 'mean'], params_df.loc['dur', 'mean'], params_df.loc['SNR', 'mean']
+#                 print('params df', params_df)
+
+#                 print('checking convergence 1')
                 pd.DataFrame({'TICID':[con.TICID], 't0':[T0_], 'per':[period_], 'depth':[depth_], 'converged': [True], 'conv_on_run':[conv_attempt]}).to_csv('../checking_convergence_output/'+str(con.TICID)+'_'+str(round(T0_, 5))+'_Yconv_per.csv')
 
 
             else:
                 T0_, period_, tdur_, depth_, SNR = np.nan, np.nan, np.nan, np.nan, 0
 
-                print('checking convergence 2')
+#                 print('checking convergence 2')
                 pd.DataFrame({'TICID':[con.TICID], 't0':[t0s[iii]], 'per':[pers[iii]], 'depth':[depths[iii]], 'converged': [False], 'conv_on_run':[np.nan]}).to_csv('../checking_convergence_output/'+str(con.TICID)+'_'+str(round(t0s[iii], 5))+'_Nconv_per.csv')
 
 
@@ -1434,12 +1569,18 @@ def fitting_periodic_planets(time, flux, flux_err, pers, t0s, depths, ab, intran
                 depth.append(depth_)
                 SNR_vals.append(SNR)
 
+
+                intransit = np.logical_or(intransit, transit_mask(total_time, period_, float(tdur_), float(T0_), buffer = 0.5))
+
             gc.collect()
 
-            intransit = np.logical_or(intransit, transit_mask(total_time, period_, float((1.5*tdur_)), float(T0_)))
+    if len(params_df_all)>0:
 
-    print('params df 3', params_df)
-    return T0_vals, periods, depth, Tdur, SNR_vals, intransit, params_df
+        params_df_all = pd.concat(params_df_all)
+    
+
+#     print('params df 3', params_df_all)
+    return T0_vals, periods, depth, Tdur, SNR_vals, intransit, params_df_all
 
             
         
@@ -1481,9 +1622,9 @@ def searching_for_periodic_signals(data_file, ab, TLS = False, verbose = True, s
         
         nt0_vals, nperiods, ndepth, nTdur, nSNR_vals, intransit, params_df = fitting_periodic_planets(time, flux, flux_err, periods_multis[sort_indices], T0_multis[sort_indices], depth_multis[sort_indices], ab, intransit_per, verbose, save_phaseFold, data_file = data_file)
 
-        params_df.loc[len(params_df)] = [None] * len(params_df.columns) 
-
-        params.append(params_df)
+#         params_df.loc[len(params_df)] = [None] * len(params_df.columns) 
+        if len(params_df)>0:
+            params.append(params_df)
 
         periods.extend(nperiods)
         T0_vals.extend(nt0_vals)
@@ -1507,16 +1648,23 @@ def searching_for_periodic_signals(data_file, ab, TLS = False, verbose = True, s
 
 #     print('split indexes lengths: ', [len(x) for x in indexes_split])
     if len(indexes_split)>1:
-        for iii in range(len(indexes_split)):
-            if len(indexes_split) == 1:
+        for iii, indxs_s in enumerate(indexes_split):
+            if len(indxs_s) == 1:
                 print('too few indexes to run again')
                 continue
     #         print('len time', len(new_time))
-            intransit_split = np.array(intransit[indexes_split[iii]])
-            split_time = np.array(time[indexes_split[iii]])
-            split_flux = np.array(flux[indexes_split[iii]])
-            split_flux_err = np.array(flux_err[indexes_split[iii]])
+    
 
+            intransit_split = np.array(intransit[indxs_s])
+        
+        
+            split_time     = np.array(time[indxs_s])
+            split_flux     = np.array(flux[indxs_s])
+            split_flux_err = np.array(flux_err[indxs_s])
+
+            masked_time = split_time[intransit_split]
+            masked_flux = split_flux[intransit_split]
+            masked_flux_err = split_flux_err[intransit_split]
 
             if len(split_time)==0:
                 print('WHY ISNT THIS WORKING')
@@ -1528,24 +1676,31 @@ def searching_for_periodic_signals(data_file, ab, TLS = False, verbose = True, s
                 if TLS:
                     periods_multis, T0_multis, Tdur_multis, depth_multis, intransit_small = using_TLS_to_find_periodic_signals(split_time, split_flux, u = ab, verbose = verbose)
                 else:
-                    periods_multis, T0_multis, Tdur_multis, depth_multis, intransit_small = using_BLS_recursive(split_time, split_flux, verbose = verbose, intransit = np.full(len(split_time), False), periods = periods.copy(), T0 =T0_vals.copy(), Tdur = Tdur.copy(), depths = depth.copy())
+                    periods_multis, T0_multis, Tdur_multis, depth_multis, intransit_small = using_BLS_recursive(masked_time, masked_flux, verbose = verbose, periods = periods.copy(), T0 =T0_vals.copy(), Tdur = Tdur.copy(), depths = depth.copy())
 
-            intransit[indexes_split[iii]] = np.logical_or(intransit_split, intransit_small)
+#             intransit[indexes_split[iii]] = np.logical_or(intransit_split, intransit_small)
 
 
             toss_bool = np.isin(np.round(periods_multis, 1), np.round(periods, 1))
 
 
-            print('periods to not run again', np.array(periods_multis)[toss_bool])
+            print('periods to not run again', np.array(periods_multis)[toss_bool], 'rest to run', np.array(periods_multis)[~toss_bool])
 
-            if len(np.array(periods_multis[~toss_bool]))>0:
+            if len(np.array(periods_multis)[~toss_bool])>0:
+                
+                try:
+                    sub_per, sub_t0, sub_depth = [list(np.array(x)[~toss_bool]) for x in [periods_multis, T0_multis, depth_multis]]
+                except Exception as err:
+                    print(err)
+                    print(f'len(per) {len(periods_multis)}, len(T0) {len(T0_multis)}, len(Depth) {len(depth_multis)}, len(bool) {len(toss_bool)}')
+                    toss_bool = np.full(False, len(T0_multis))
 
 
-                nt0_vals_split, nperiods_split, ndepth_split, nTdur_split, nSNR_vals_split, intransit, nparams_df = fitting_periodic_planets(split_time, split_flux, split_flux_err, list(np.array(periods_multis)[~toss_bool]), list(np.array(T0_multis)[~toss_bool]), list(np.array(depth_multis)[~toss_bool]), ab, intransit, verbose, save_phaseFold=False, total_time = time, data_file=data_file)
+                nt0_vals_split, nperiods_split, ndepth_split, nTdur_split, nSNR_vals_split, intransit, nparams_df = fitting_periodic_planets(split_time, split_flux, split_flux_err, sub_per, sub_t0, sub_depth, ab, intransit, verbose, save_phaseFold=False, total_time = time, data_file=data_file)
 
-                nparams_df.loc[len(nparams_df)] = [None] * len(nparams_df.columns) 
 
-                params.append(nparams_df)
+                if len(nparams_df)>0:
+                    params.append(nparams_df)
 
                 periods.extend(nperiods_split)
                 T0_vals.extend(nt0_vals_split)
@@ -1555,22 +1710,416 @@ def searching_for_periodic_signals(data_file, ab, TLS = False, verbose = True, s
 
     print('done with multis ', iii+1, ':', len(indexes_split))
 
-    print('params df 2', params)
+#     print('params df 2', params)
 
+    
     only_per_intransit = np.full(len(time), False)
 
     for iii in range(len(periods)):
-        print('period is', periods[iii])
+#         print('period is', periods[iii])
         new_transit_planet = transit_mask(time, periods[iii], Tdur[iii], T0_vals[iii])
-        print('intransit '+str((iii+1)*7), new_transit_planet, len(np.where(new_transit_planet)[0]), len(new_transit_planet))
+#         print('intransit '+str((iii+1)*7), new_transit_planet, len(np.where(new_transit_planet)[0]), len(new_transit_planet))
 
-        only_per_intransit = np.logical_or(only_per_intransit,new_transit_planet)
+        only_per_intransit = np.logical_or(only_per_intransit, new_transit_planet)
         
 
     intransit_indexes =  np.where(only_per_intransit)
     
-    return periods, T0_vals, Tdur, depth, only_per_intransit, SNR_vals,intransit_indexes, params
+    return periods, T0_vals, Tdur, depth, only_per_intransit, SNR_vals, intransit_indexes, params
 
+# ---------- stacked-table block utilities ----------
+
+def split_summary_blocks(summary: pd.DataFrame) -> List[pd.DataFrame]:
+    blocks, cur_rows, cur_idx = [], [], []
+    for idx, row in summary.iterrows():
+        if row.isna().all():
+            if cur_rows:
+                B = pd.DataFrame(cur_rows, index=cur_idx, columns=summary.columns)
+                B.index = [str(r).strip().lower() for r in B.index]
+                B.columns = [str(c).strip().lower() for c in B.columns]
+                blocks.append(B.copy())
+                cur_rows, cur_idx = [], []
+        else:
+            cur_rows.append(row.values)
+            cur_idx.append(str(idx))
+    if cur_rows:
+        B = pd.DataFrame(cur_rows, index=cur_idx, columns=summary.columns)
+        B.index = [str(r).strip().lower() for r in B.index]
+        B.columns = [str(c).strip().lower() for c in B.columns]
+        blocks.append(B.copy())
+    return blocks
+
+def _cell_to_scalar(block: pd.DataFrame, param: str, col: str = "mean") -> Optional[float]:
+    try:
+        val = float(block.loc[param.lower(), col.lower()])
+        return val if np.isfinite(val) else None
+    except Exception:
+        return None
+
+def extract_planet_params(block: pd.DataFrame) -> Dict[str, Optional[float]]:
+    return {
+        "P_mean":     _cell_to_scalar(block, "Per",   "mean"),
+        "P_sd":       _cell_to_scalar(block, "Per",   "sd"),
+        "t0_mean":    _cell_to_scalar(block, "t0",    "mean"),
+        "t0_sd":      _cell_to_scalar(block, "t0",    "sd"),
+        "depth_mean": _cell_to_scalar(block, "depth", "mean"),
+        "depth_sd":   _cell_to_scalar(block, "depth", "sd"),
+        "dur_mean":   _cell_to_scalar(block, "dur",   "mean"),
+        "dur_sd":     _cell_to_scalar(block, "dur",   "sd"),
+        "snr_mean":   _cell_to_scalar(block, "snr",   "mean"),
+        "snr_sd":     _cell_to_scalar(block, "snr",   "sd"),
+    }
+
+
+# ---------- alias resolution helpers ----------
+
+def _find_near_integer_aliases(P: np.ndarray, tol_abs: float, use_rel: bool, tol_rel: float) -> List[List[int]]:
+    n = len(P)
+    adjacency = [[] for _ in range(n)]
+    for i in range(n):
+        for j in range(i + 1, n):
+            r = max(P[i], P[j]) / min(P[i], P[j])
+            ok, k = _near_integer(r, tol=tol_abs)
+            if not (ok and (k is not None) and (k >= 1)):
+                continue
+            if use_rel and (abs(r - k) / max(k, 1) > tol_rel):
+                continue
+            adjacency[i].append(j)
+            adjacency[j].append(i)
+    return adjacency
+
+def _grouping_connected_components(adj: List[List[int]]) -> List[List[int]]:
+    n = len(adj)
+    seen = np.zeros(n, dtype=bool)
+    groups = []
+    for i in range(n):
+        if seen[i]:
+            continue
+        stack, comp = [i], []
+        seen[i] = True
+        while stack:
+            u = stack.pop()
+            comp.append(u)
+            for v in adj[u]:
+                if not seen[v]:
+                    seen[v] = True
+                    stack.append(v)
+        groups.append(sorted(comp))
+    return groups
+
+def _alignment_tol_days(
+    dur_short: float, z_align: float, dur_frac: float,
+    sd_t0_short: float, sd_t0_long: float, Psd_short: float, n_cycles: int
+) -> float:
+    sigma_align = np.hypot(sd_t0_short, sd_t0_long)
+    if (Psd_short > 0) and (n_cycles != 0):
+        sigma_align = np.hypot(sigma_align, abs(n_cycles) * Psd_short)
+    base = z_align * sigma_align
+    floor = (dur_frac * dur_short) if (np.isfinite(dur_short) and dur_short > 0) else 0.0
+    return max(base, floor)
+
+def _aligns_by_short_ephemeris(
+    i: int, j: int,
+    P: np.ndarray, t0: np.ndarray, sd_t0: np.ndarray, Psd: np.ndarray, dur: np.ndarray,
+    z_align: float, dur_frac: float
+) -> Tuple[bool, Dict[str, float]]:
+    # determine short vs long
+    if P[i] <= P[j]:
+        i_short, j_long = i, j
+    else:
+        i_short, j_long = j, i
+
+    P_s, t0_s = P[i_short], t0[i_short]
+    t_long = t0[j_long]
+    sd_t0_s = float(sd_t0[i_short] or 0.0)
+    sd_t0_l = float(sd_t0[j_long]  or 0.0)
+    Psd_s = float(Psd[i_short] or 0.0)
+    dur_s = float(dur[i_short] if np.isfinite(dur[i_short]) else dur[j_long])
+
+    n = int(np.rint((t_long - t0_s) / P_s)) if (P_s > 0) else 0
+    tol = _alignment_tol_days(dur_s, z_align, dur_frac, sd_t0_s, sd_t0_l, Psd_s, n)
+    off = _offset_to_ephemeris(t_long, t0_s, P_s)
+    return (np.isfinite(off) and off <= tol), {"pair": (i, j), "off": float(off), "tol": float(tol)}
+
+
+def _offset_period_candidate(
+    P_short: float, P_long: float,
+    t0_short: float, t0_long: float,
+    *,
+    ratio_tol_abs: float = 0.05,
+    kmax: int = 10,
+    P_min: float = 0.25,
+    P_max: float | None = None
+) -> float | None:
+    """
+    If periods are near-integer related but misaligned, test whether the epoch
+    offset to the short ephemeris looks like a 1/k submultiple of the short period.
+    Return that offset as a candidate period if plausible; else None.
+    """
+    if not (np.isfinite(P_short) and np.isfinite(P_long) and P_short > 0 and P_long > 0):
+        return None
+    off = _offset_to_ephemeris(t0_long, t0_short, P_short)
+    if not (np.isfinite(off) and 0 < off < max(P_short, P_long) / 2):
+        return None
+
+    r_off = P_short / off
+    rel1, k1 = _near_integer(r_off, tol=ratio_tol_abs)
+    rel2, k2 = _near_integer(1.0 / r_off, tol=ratio_tol_abs)
+    if not (rel1 or rel2):
+        return None
+
+    k = int(max(1, (k1 if rel1 else k2)))
+    if k >= kmax:
+        return None
+
+    if P_max is not None and off > P_max:
+        return None
+    if off < P_min:
+        return None
+
+    return float(off)
+
+
+
+
+def resolve_period_aliases_from_summary(
+    summary: pd.DataFrame,
+    *,
+    ratio_tol_abs: float = 0.05,     # absolute |r - k| tolerance for near-integer ratio
+    ratio_rel_use: bool = False,     # if True, also require |r-k|/k <= ratio_tol_rel
+    ratio_tol_rel: float = 0.02,     # relative tolerance (2%)
+    z_depth: float = 2.0,            # require depth_mean - z_depth*depth_sd > 0
+    z_align: float = 2.5,            # sigma multiplier for epoch alignment
+    dur_frac: float = 0.25,          # floor as fraction of short duration
+    snr_sd_floor: float = 1e-6,      # denom floor in stability score
+    # record offset suggestions (not used to choose winners unless you decide to)
+    offset_kmax: int = 10,
+    offset_P_min: float = 0.25,
+    offset_P_max: Optional[float] = None
+) -> Tuple[np.ndarray, List[Dict[str, Any]]]:
+    """
+    Resolve near-integer period aliases between planet candidates in a stacked summary.
+
+    Returns
+    -------
+    kept_period_by_idx : np.ndarray
+        For each candidate (block) i, the period value of the group's winner.
+        (You can use this to update other tables; no need for a True/False mask.)
+    decisions : list of dict
+        One dict per alias group with winner, reason, diagnostics, and any
+        offset-as-period suggestions observed for misaligned pairs.
+    """
+    blocks = split_summary_blocks(summary)
+    N = len(blocks)
+    params = [extract_planet_params(B) for B in blocks]
+
+    P   = np.array([p["P_mean"]     for p in params], dtype=float)
+    t0  = np.array([p["t0_mean"]    for p in params], dtype=float)
+    sd0 = np.array([p["t0_sd"]      for p in params], dtype=float)
+    dpt = np.array([p["depth_mean"] for p in params], dtype=float)
+    sdd = np.array([p["depth_sd"]   for p in params], dtype=float)
+    dur = np.array([p["dur_mean"]   for p in params], dtype=float)
+    Psd = np.array([p["P_sd"]       for p in params], dtype=float)
+    SNRm= np.array([p["snr_mean"]   for p in params], dtype=float)
+    SNRs= np.array([p["snr_sd"]     for p in params], dtype=float)
+
+    adj    = _find_near_integer_aliases(P, tol_abs=ratio_tol_abs, use_rel=ratio_rel_use, tol_rel=ratio_tol_rel)
+    groups = _grouping_connected_components(adj)
+
+    kept_period = np.array(P, copy=True)
+    decisions: List[Dict[str, Any]] = []
+
+    for g in groups:
+        if len(g) == 1:
+            i = g[0]
+            decisions.append({"members": g, "winner_idx": i, "winner_period": float(P[i]),
+                              "reason": "no_alias_relation", "details": []})
+            kept_period[i] = P[i]
+            continue
+
+        cand = sorted(g, key=lambda idx: (P[idx], idx))
+        records = []
+
+        for idx in cand:
+            depth_ok = (dpt[idx] - z_depth * sdd[idx]) > 0
+
+            align_ok = True
+            checks: List[Dict[str, float]] = []
+            offset_suggestions: List[float] = []
+
+            for jdx in cand:
+                if jdx == idx:
+                    continue
+                ok, diag = _aligns_by_short_ephemeris(idx, jdx, P, t0, sd0, Psd, dur, z_align, dur_frac)
+                checks.append(diag)
+                if not ok:
+                    align_ok = False
+                    # Try offset-as-period suggestion using the shorter ephemeris
+                    if P[idx] <= P[jdx]:
+                        P_s, P_l = P[idx], P[jdx]
+                        t_s, t_l = t0[idx], t0[jdx]
+                    else:
+                        P_s, P_l = P[jdx], P[idx]
+                        t_s, t_l = t0[jdx], t0[idx]
+                    offP = _offset_period_candidate(
+                        P_s, P_l, t_s, t_l,
+                        ratio_tol_abs=ratio_tol_abs, kmax=offset_kmax,
+                        P_min=offset_P_min, P_max=offset_P_max
+                    )
+                    if offP is not None:
+                        offset_suggestions.append(offP)
+
+            sm = float(SNRm[idx] if np.isfinite(SNRm[idx]) else 0.0)
+            ss = float(SNRs[idx] if np.isfinite(SNRs[idx]) and SNRs[idx] >= 0 else 0.0)
+            score = sm / (1.0 + max(ss, snr_sd_floor))
+
+            records.append({
+                "idx": idx,
+                "period": float(P[idx]),
+                "depth_ok": bool(depth_ok),
+                "align_ok": bool(align_ok),
+                "score": float(score),
+                "align_checks": checks,
+                "offset_suggestions": sorted(set(offset_suggestions))
+            })
+
+        winners = [r for r in records if r["depth_ok"] and r["align_ok"]]
+        if winners:
+            win = sorted(winners, key=lambda r: (r["period"], -r["score"], r["idx"]))[0]
+            reason = "kept shortest passing (alignment & depth)"
+        else:
+            win = sorted(records, key=lambda r: (-r["score"], r["period"], r["idx"]))[0]
+            reason = "no candidate passed both; kept best stability"
+
+        widx = int(win["idx"])
+        for i in g:
+            kept_period[i] = P[widx]
+
+        decisions.append({
+            "members": cand,
+            "winner_idx": widx,
+            "winner_period": float(P[widx]),
+            "reason": reason,
+            "details": records
+        })
+
+    return kept_period, decisions
+
+
+
+def apply_alias_resolution_to_table(
+    table: pd.DataFrame,
+    summary: pd.DataFrame,
+    *,
+    ratio_tol_abs: float = 0.05,
+    ratio_rel_use: bool = False,
+    ratio_tol_rel: float = 0.02,
+    z_depth: float = 2.0,
+    z_align: float = 2.5,
+    dur_frac: float = 0.25,
+    snr_sd_floor: float = 1e-6,
+    offset_kmax: int = 10,
+    offset_P_min: float = 0.25,
+    offset_P_max: Optional[float] = None
+) -> pd.DataFrame:
+    """
+    Run resolve_period_aliases_from_summary on `summary` and write results into `table`.
+
+    Assumptions:
+      * The number/order of summary blocks matches the subset of `table` rows where Ptype == 'Period'.
+      * We do not overwrite the original 'period' column; instead we add 'kept_period'.
+      * Winners get Default=True; losers Default=False; Notes are appended.
+
+    Returns: updated copy of `table` with 'kept_period', 'Default', and 'Notes' updated.
+    """
+    df = table.copy()
+
+    # ensure bookkeeping columns
+    if 'Notes' not in df.columns:
+        df['Notes'] = ''
+    if 'Default' not in df.columns:
+        df['Default'] = True
+
+    # subset rows that correspond to the alias resolution blocks
+    per_idx = df.index[df['Ptype'] == 'Period'].to_numpy()
+    per_view = df.loc[per_idx]
+
+    kept_period, decisions = resolve_period_aliases_from_summary(
+        summary,
+        ratio_tol_abs=ratio_tol_abs,
+        ratio_rel_use=ratio_rel_use,
+        ratio_tol_rel=ratio_tol_rel,
+        z_depth=z_depth,
+        z_align=z_align,
+        dur_frac=dur_frac,
+        snr_sd_floor=snr_sd_floor,
+        offset_kmax=offset_kmax,
+        offset_P_min=offset_P_min,
+        offset_P_max=offset_P_max
+    )
+
+    # sanity: align lengths by truncation (preferably they should match exactly)
+    n_map = min(len(per_idx), len(kept_period))
+    if len(per_idx) != len(kept_period):
+        # If you prefer, raise an exception instead of silently truncating:
+        # raise ValueError("Mismatch between number of 'Period' rows and summary blocks.")
+        per_idx = per_idx[:n_map]
+        kept_period = kept_period[:n_map]
+
+    # write kept_period for 'Period' rows
+    df.loc[per_idx, 'kept_period'] = kept_period
+
+    # default all 'Period' rows to True; we will set losers to False per-group
+    df.loc[per_idx, 'Default'] = True
+
+    # annotate winners/losers per decision group
+    # map block index -> table index
+    block_to_table = {bi: int(per_idx[bi]) for bi in range(n_map)}
+
+    for d in decisions:
+        members = [bi for bi in d["members"] if bi < n_map]
+        if not members:
+            continue
+        w_block = int(d["winner_idx"])
+        if w_block >= n_map:
+            # winner outside truncated range; skip
+            continue
+
+        w_row = block_to_table[w_block]
+        member_rows = [block_to_table[bi] for bi in members]
+
+        # loser rows
+        losers = [r for r in member_rows if r != w_row]
+        if losers:
+            df.loc[losers, 'Default'] = False
+
+        # build compact notes
+        # planet numbers if available, else row indices
+        def _pnum(irow: int) -> str:
+            try:
+                return str(int(df.at[irow, 'planet_name']))
+            except Exception:
+                return f"row{int(irow)}"
+
+        if losers:
+            keptP = float(df.at[w_row, 'kept_period']) if 'kept_period' in df.columns else float(df.at[w_row, 'period'])
+            loser_note = f"alias of planet {_pnum(w_row)} (kept P={keptP:.6f})"
+            df.loc[losers, 'Notes'] = df.loc[losers, 'Notes'].astype(str)
+            df.loc[losers, 'Notes'] = np.where(
+                df.loc[losers, 'Notes'].str.len() > 0,
+                df.loc[losers, 'Notes'] + "; " + loser_note,
+                loser_note
+            )
+
+        # winner note
+        if len(member_rows) > 1:
+            others = [r for r in member_rows if r != w_row]
+            other_pnums = ",".join(_pnum(r) for r in others)
+            win_note = f"kept vs aliases {other_pnums}"
+            cur = df.at[w_row, 'Notes']
+            df.at[w_row, 'Notes'] = (cur + "; " + win_note) if (isinstance(cur, str) and len(cur) > 0) else win_note
+
+    return df
 
 
 
@@ -1587,37 +2136,35 @@ def executing_total_periodic_search(data_file, ticid, catalog_df = False, TLS = 
     if len(params)>0:
         params = pd.concat(params)
         
-    print('params df 1', params)
+    print('params df', params)
     print('init number of periodic planets', len(periods_multi),  periods_multi)
-    nnn = 0
+#     nnn = 0
 
 #     if len(set(np.round(periods_multi, 2)))<len(periods_multi):
-    if len(periods_multi)>1:
-        final_indxes, per_div = checking_multiples_and_duplicate_periodic_planets(periods_multi, T0_multi, depth_multi, SNR)   
+    if len(periods_multi)>0:
+#         final_indxes, per_div = checking_multiples_and_duplicate_periodic_planets(periods_multi, T0_multi, depth_multi, SNR)   
 
-        periods_multi = np.array(periods_multi)/per_div
-        print('new periodic planets', len(periods_multi), periods_multi)
+#         periods_multi = np.array(periods_multi)/per_div
+#         print('new periodic planets', len(periods_multi), periods_multi)
 
-    elif len(periods_multi) == 1:
-        final_indxes = np.array([True])
-#     else: 
-#         final_indxes = range(len(T0_multi)) 
-    else:
-        final_indxes = []
+#     elif len(periods_multi) == 1:
+#         final_indxes = np.array([True])
+# #     else: 
+# #         final_indxes = range(len(T0_multi)) 
+#     else:
+#         final_indxes = []
         
         
     
 
-    for jjj in np.where(final_indxes)[0]:
-        nnn+=1
-        planet_name = str(nnn)
-        
-        print('index', jjj)
-        
+        for jjj in range(len(periods_multi)):
+            planet_name = int(jjj+1)
+            print('index', jjj)
 
-        planet_df.loc[len(planet_df.index)] = [int(ticid), planet_name, periods_multi[jjj], T0_multi[jjj], Tdur_multi[jjj], min([1-depth_multi[jjj], depth_multi[jjj]]), SNR[jjj]]
-        
-    print('done ', ticid, planet_df)
+
+            planet_df.loc[len(planet_df.index)] = [int(ticid), planet_name, periods_multi[jjj], T0_multi[jjj], Tdur_multi[jjj], min([1-depth_multi[jjj], depth_multi[jjj]]), SNR[jjj]]
+
+        print('done ', ticid, planet_df)
 
     if save_time:
         tm2 = tm.time()
@@ -1644,45 +2191,367 @@ def executing_total_periodic_search(data_file, ticid, catalog_df = False, TLS = 
     return intransit, planet_df, params
 
 
-def approximate_common_denominator(float1, float2, precision=10**5):
-    int1 = int(float1 * precision)
-    int2 = int(float2 * precision)
+# def approximate_common_denominator(float1, float2, precision=10**5):
+#     int1 = int(float1 * precision)
+#     int2 = int(float2 * precision)
 
-    gcd = math.gcd(int1, int2)
-    return gcd / precision
+#     gcd = math.gcd(int1, int2)
+#     return gcd / precision
 
-# In[54]:
-def check_if_singles_are_periodic(T0_lst):
-    new_rrr = []
-    T0_vals = []
-    for j in range(len(T0_lst)):
-        diff = np.array(T0_lst)-T0_lst[j]
-        for i in range(len(diff)):
-            for k in range(len(diff)):
-                if k == j or i == j:
-                    continue
-                else:
-                    rrr = np.array(approximate_common_denominator(diff[i], diff[k]))
-                    if len(rrr[rrr>2.5])>0:
-                        new_rrr.append(list(rrr[rrr>2.5]))
-                        T0_vals.extend([T0_lst[i], T0_lst[j], T0_lst[k]])
+# # In[54]:
+# def check_if_singles_are_periodic(T0_lst):
+#     new_rrr = []
+#     T0_vals = []
+#     for j in range(len(T0_lst)):
+#         diff = np.array(T0_lst)-T0_lst[j]
+#         for i in range(len(diff)):
+#             for k in range(len(diff)):
+#                 if k == j or i == j:
+#                     continue
+#                 else:
+#                     rrr = np.array(approximate_common_denominator(diff[i], diff[k]))
+#                     if len(rrr[rrr>2.5])>0:
+#                         new_rrr.append(list(rrr[rrr>2.5]))
+#                         T0_vals.extend([T0_lst[i], T0_lst[j], T0_lst[k]])
 
 
-    set_rrr = [ele for ind, ele in enumerate(new_rrr) if ele not in new_rrr[:ind]]    
-    T0_vals = list(set(T0_vals))
+#     set_rrr = [ele for ind, ele in enumerate(new_rrr) if ele not in new_rrr[:ind]]    
+#     T0_vals = list(set(T0_vals))
     
-    T0_per_vals = []
-    for val in list(set_rrr):
-        pers = new_rrr[new_rrr == val]
-        T0_min = min(T0_vals)
-#         print(T0_vals)
-        per_max = max(pers)
-        T0_per_vals.append([T0_min, per_max, T0_vals])
-    return T0_per_vals
+#     T0_per_vals = []
+#     for val in list(set_rrr):
+#         pers = new_rrr[new_rrr == val]
+#         T0_min = min(T0_vals)
+# #         print(T0_vals)
+#         per_max = max(pers)
+#         T0_per_vals.append([T0_min, per_max, T0_vals])
+#     return T0_per_vals
+
+
+# ---------- Prep: build Δt/m clusters ----------
+# ---------- singles prep and scoring (unchanged behavior; short) ----------
+
+def prepping_singles_for_periodic_check(
+    t0_singles,
+    durations=None, depths=None,
+    max_missed_transits=7, P_min=0.25, P_max=None,
+    phase_win=None, rel_merge=0.01, min_support=3
+):
+    t0_all = np.asarray(t0_singles, dtype=float)
+    t0, idx = np.unique(t0_all, return_index=True)
+    if t0.size < 2:
+        return t0, None, None, [], (phase_win if phase_win is not None else 0.05)
+
+    dur = (np.asarray(durations, dtype=float)[idx]
+           if (durations is not None and len(durations) == len(t0_singles)) else None)
+    dep = (np.asarray(depths, dtype=float)[idx]
+           if (depths is not None and len(depths) == len(t0_singles)) else None)
+
+    baseline = float(t0[-1] - t0[0])
+    P_max_eff = float(P_max) if (P_max is not None) else max(1.0, baseline if (min_support <= 2) else (baseline / 2.0))
+
+    if phase_win is None:
+        if (dur is not None) and np.isfinite(dur).any():
+            phase_win_eff = max(0.02, 0.4 * float(np.nanmedian(dur)))
+        else:
+            phase_win_eff = 0.04
+    else:
+        phase_win_eff = float(phase_win)
+
+    diffs = np.array([t0[j] - t0[i] for i in range(t0.size) for j in range(i + 1, t0.size)], dtype=float)
+    diffs = diffs[diffs > 0]
+
+    cand = []
+    for delta in diffs:
+        for m in range(1, max_missed_transits + 1):
+            P = delta / m
+            if (P_min <= P <= P_max_eff):
+                cand.append(P)
+    if not cand:
+        return t0, dur, dep, [], phase_win_eff
+
+    cand = np.sort(np.array(cand, dtype=float))
+    groups, cur = [], [cand[0]]
+    for v in cand[1:]:
+        if abs(v - np.median(cur)) / max(v, 1e-6) <= rel_merge:
+            cur.append(v)
+        else:
+            groups.append(np.array(cur, dtype=float)); cur = [v]
+    groups.append(np.array(cur, dtype=float))
+    return t0, dur, dep, groups, phase_win_eff
+
+def score_once_modes(
+    t0, dur, dep, groups, phase_win,
+    min_support=3, use_depth=True, depth_zmax=2.5, depth_ratio_max=1.75, depth_floor=5e-5,
+    local_span=0.02, local_n=41
+):
+    out = []
+    if t0.size < min_support or len(groups) == 0:
+        return out
+
+    for g in groups:
+        P0 = float(np.median(g))
+        grid = P0 * np.linspace(1.0 - local_span, 1.0 + local_span, local_n)
+        best, best_members = None, None
+
+        for P in grid:
+            phases = (t0 - t0[0]) % P
+            phases = np.where(phases > P/2, phases - P, phases)
+            center = np.median(phases)
+            resid  = (phases - center) % P
+            resid  = np.where(resid > P/2, resid - P, resid)
+
+            members = np.where(np.abs(resid) <= phase_win)[0]
+            support = int(members.size)
+            if support < min_support:
+                continue
+
+            if use_depth and (dep is not None) and (members.size > 1):
+                d_sup = dep[members]
+                d_med = float(np.median(d_sup))
+                scat  = 1.4826 * np.median(np.abs(d_sup - d_med))  # MAD
+                if scat <= depth_floor:
+                    dmax, dmin = float(np.max(d_sup)), float(np.min(d_sup))
+                    if (dmax / max(dmin, depth_floor)) > depth_ratio_max:
+                        continue
+                else:
+                    z = np.abs(d_sup - d_med) / scat
+                    if np.any(z > depth_zmax):
+                        continue
+                depth_penalty = scat
+            else:
+                d_med, depth_penalty = (np.nan, 0.0)
+
+            phase_rms = float(np.sqrt(np.mean(resid[members]**2)))
+            key = (support, -phase_rms, -depth_penalty)
+            if (best is None) or (key > best[0]):
+                best = (key, float(P), float(center), support, phase_rms, d_med, depth_penalty)
+                best_members = members
+
+        if best is None:
+            continue
+        _, P_star, center, support, phase_rms, d_med, depth_pen = best
+        out.append({
+            'P': float(P_star),
+            'T0': float(t0[0] + center),
+            'support': int(support),
+            'members': np.array(best_members, dtype=int),
+            'phase_rms': float(phase_rms),
+            'depth_med': float(d_med),
+            'depth_scat': float(depth_pen) if np.isfinite(depth_pen) else np.nan
+        })
+
+    out.sort(key=lambda d: (-d['support'], d['phase_rms']))
+    return out
+
+def extract_all_modes_iterative(
+    t0_init, dur_init, dep_init,
+    min_support=3, prep_kwargs=None, scorer_kwargs=None
+):
+    prep_kwargs = prep_kwargs or {}
+    scorer_kwargs = scorer_kwargs or {}
+
+    accepted = []
+    t0 = np.array(t0_init, dtype=float)
+    dur = None if dur_init is None else np.array(dur_init, dtype=float)
+    dep = None if dep_init is None else np.array(dep_init, dtype=float)
+
+    while True:
+        t0_w, dur_w, dep_w, groups, phase_win = prepping_singles_for_periodic_check(
+            t0, dur, dep, min_support=min_support, **prep_kwargs
+        )
+        if (t0_w.size < min_support) or (len(groups) == 0):
+            break
+
+        candidates = score_once_modes(
+            t0_w, dur_w, dep_w, groups, phase_win,
+            min_support=min_support, **scorer_kwargs
+        )
+        if len(candidates) == 0:
+            break
+
+        best = candidates[0]
+        accepted.append(best)
+
+        keep = np.ones(t0_w.size, dtype=bool)
+        keep[best['members']] = False
+        t0 = t0_w[keep]
+        dur = None if dur_w is None else dur_w[keep]
+        dep = None if dep_w is None else dep_w[keep]
+
+        if t0.size < min_support:
+            break
+
+    return accepted
 
 
 
+# ---------- small dataframe helpers ----------
 
+def _ensure_bookkeeping_cols(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    if 'Notes' not in df.columns:
+        df['Notes'] = ''
+    if 'Default' not in df.columns:
+        df['Default'] = True
+    return df
+
+def _add_periodic_rows_from_modes(df: pd.DataFrame, singles_df: pd.DataFrame, modes: List[Dict[str, Any]]) -> pd.DataFrame:
+    if len(modes) == 0:
+        return df
+
+    s_idx  = singles_df.index.to_numpy()
+    added_rows = []
+
+    for m in modes:
+        if m.get('support', 0) < 3:
+            continue
+
+        mem_local = m['members']
+        mem_dfidx = s_idx[mem_local]
+        mem_nums  = df.loc[mem_dfidx, 'planet_name'].astype(int).tolist()
+
+        next_num = (int(df['planet_name'].max()) + 1) if 'planet_name' in df.columns else 1
+
+        P_new, T0_new = float(m['P']), float(m['T0'])
+        Td_new = float(np.nanmedian(df.loc[mem_dfidx, 'Tdur']))  if 'Tdur'  in df.columns else 0.10
+        Dp_new = float(np.nanmedian(df.loc[mem_dfidx, 'depth'])) if 'depth' in df.columns else np.nan
+
+        added_rows.append({
+            'TICID': df['TICID'].iloc[0] if 'TICID' in df.columns else None,
+            'planet_name': next_num,
+            'Ptype': 'Period',
+            'period': P_new, 'T0': T0_new, 'Tdur': Td_new, 'depth': Dp_new,
+            'SNR': np.nan,
+            'Notes': f"made of singles {','.join(str(n) for n in mem_nums)}",
+            'Default': True
+        })
+
+        df.loc[mem_dfidx, 'Default'] = False
+        df.loc[mem_dfidx, 'Notes'] = df.loc[mem_dfidx, 'Notes'].astype(str)
+        df.loc[mem_dfidx, 'Notes'] = np.where(
+            df.loc[mem_dfidx, 'Notes'].str.len() > 0,
+            df.loc[mem_dfidx, 'Notes'] + f"; now planet {next_num}",
+            f"now planet {next_num}"
+        )
+
+    if len(added_rows) > 0:
+        df = pd.concat([df, pd.DataFrame(added_rows)], ignore_index=True)
+    return df
+
+def _attach_remaining_singles(
+    df: pd.DataFrame,
+    epoch_tol_scale: float, fixed_epoch_tol: float,
+    use_depth_for_attach: bool, depth_ratio_max_attach: float
+) -> pd.DataFrame:
+    periodic_df = df[df['Ptype'] == 'Period'].copy()
+    singles_df  = df[(df['Ptype'] == 'Single') & (df['Default'] == True)].copy()
+    if len(singles_df) == 0 or len(periodic_df) == 0:
+        return df
+
+    P  = np.asarray(periodic_df['period'], dtype=float)
+    T0 = np.asarray(periodic_df['T0'],     dtype=float)
+    Td = np.asarray(periodic_df['Tdur'],   dtype=float) if 'Tdur'  in periodic_df else np.full(len(P), np.nan)
+    Dp = np.asarray(periodic_df['depth'],  dtype=float) if 'depth' in periodic_df else np.full(len(P), np.nan)
+
+    s_T0 = np.asarray(singles_df['T0'],    dtype=float)
+    s_Td = np.asarray(singles_df['Tdur'],  dtype=float) if 'Tdur'  in singles_df else np.full(len(s_T0), np.nan)
+    s_Dp = np.asarray(singles_df['depth'], dtype=float) if 'depth' in singles_df else np.full(len(s_T0), np.nan)
+
+    per_idx_map = periodic_df.index.to_numpy()
+    sgl_idx_map = singles_df.index.to_numpy()
+
+    attached_to: Dict[int, List[int]] = {}
+
+    for s_local, (t0_s, td_s, d_s) in enumerate(zip(s_T0, s_Td, s_Dp)):
+        best_i, best_off = None, None
+        for i, (p_i, t0_i, td_i, d_i) in enumerate(zip(P, T0, Td, Dp)):
+            if not np.isfinite(p_i) or p_i <= 0:
+                continue
+            t_near = _nearest_epoch_to_time(t0_s, t0_i, p_i)
+            off = abs(t0_s - t_near)
+            tol = max(fixed_epoch_tol, epoch_tol_scale * (td_i if np.isfinite(td_i) else td_s))
+            if off > tol:
+                continue
+            if use_depth_for_attach and np.isfinite(d_s) and np.isfinite(d_i):
+                dmax, dmin = max(d_s, d_i), max(min(d_s, d_i), 5e-5)
+                if (dmax / dmin) > depth_ratio_max_attach:
+                    continue
+            if (best_off is None) or (off < best_off):
+                best_off, best_i = off, i
+        if best_i is not None:
+            s_global = sgl_idx_map[s_local]
+            p_global = per_idx_map[best_i]
+            attached_to.setdefault(p_global, []).append(s_global)
+
+    for p_global, s_list in attached_to.items():
+        added_nums = df.loc[s_list, 'planet_name'].astype(int).tolist()
+        add_note = f"added singles {','.join(str(n) for n in added_nums)}"
+        cur = df.at[p_global, 'Notes']
+        df.at[p_global, 'Notes'] = (cur + "; " + add_note) if (isinstance(cur, str) and len(cur) > 0) else add_note
+
+        period_num = int(df.at[p_global, 'planet_name'])
+        df.loc[s_list, 'Default'] = False
+        df.loc[s_list, 'Notes'] = df.loc[s_list, 'Notes'].astype(str)
+        df.loc[s_list, 'Notes'] = np.where(
+            df.loc[s_list, 'Notes'].str.len() > 0,
+            df.loc[s_list, 'Notes'] + f"; now planet {period_num}",
+            f"now planet {period_num}"
+        )
+    return df
+def annotate_planet_table_from_singles_numeric(
+    df,
+    *,
+    min_support=3,
+    use_iterative=True,
+    use_depth=True,
+    attach_to_known=True,
+    epoch_tol_scale=0.25, fixed_epoch_tol=0.05,
+    use_depth_for_attach=True, depth_ratio_max_attach=1.75,
+    m_max=7, P_min=0.25, P_max=None, rel_merge=0.01,
+    local_span=0.02, local_n=41
+):
+    """
+    Mutates a copy of df:
+      1) Adds 'Notes' and 'Default' if missing ('' and True).
+      2) Groups singles into new periodic planets (adds new rows).
+      3) (Optional) Attaches remaining singles to existing periodic planets (no mask).
+    """
+    df = _ensure_bookkeeping_cols(df)
+
+    singles_df = df[df['Ptype'] == 'Single'].copy()
+    if len(singles_df) >= min_support:
+        s_T0 = singles_df['T0'].to_numpy(float)
+        s_Td = singles_df['Tdur'].to_numpy(float)  if 'Tdur'  in singles_df else np.full(len(singles_df), np.nan)
+        s_Dp = singles_df['depth'].to_numpy(float) if 'depth' in singles_df else np.full(len(singles_df), np.nan)
+
+        t0, dur, dep, groups, phase_win = prepping_singles_for_periodic_check(
+            s_T0, durations=s_Td, depths=s_Dp,
+            max_missed_transits=m_max, P_min=P_min, P_max=P_max, rel_merge=rel_merge, min_support=min_support
+        )
+
+        if use_iterative:
+            modes = extract_all_modes_iterative(
+                t0, dur, dep, min_support=min_support,
+                prep_kwargs={'max_missed_transits': m_max, 'P_min': P_min, 'P_max': P_max, 'rel_merge': rel_merge},
+                scorer_kwargs={'use_depth': use_depth, 'depth_zmax': 2.5, 'depth_ratio_max': 1.75,
+                               'depth_floor': 5e-5, 'local_span': local_span, 'local_n': local_n}
+            )
+        else:
+            modes = score_once_modes(
+                t0, dur, dep, groups, phase_win, min_support=min_support,
+                use_depth=use_depth, depth_zmax=2.5, depth_ratio_max=1.75,
+                depth_floor=5e-5, local_span=local_span, local_n=local_n
+            )
+
+        df = _add_periodic_rows_from_modes(df, singles_df, modes)
+
+    if attach_to_known and (df['Ptype'].eq('Single') & df['Default']).any() and (df['Ptype'].eq('Period')).any():
+        df = _attach_remaining_singles(
+            df, epoch_tol_scale=epoch_tol_scale, fixed_epoch_tol=fixed_epoch_tol,
+            use_depth_for_attach=use_depth_for_attach, depth_ratio_max_attach=depth_ratio_max_attach
+        )
+    return df
 
 
 def singles_search(ticid, data_total, intransit = [], catalog_df = False, confidence = 0.5,  verbose = True, run_1 = True, data_file = ''):
@@ -1697,7 +2566,7 @@ def singles_search(ticid, data_total, intransit = [], catalog_df = False, confid
 
     df = pd.read_csv(data_total).dropna(subset = ['FLUX'])
     total_time, total_flux, total_flux_err = [np.array(df[col]) for col in ['TIME', 'FLUX', 'FLUX_ERR']]
-    print('checking time again', len(total_time))
+#     print('checking time again', len(total_time))
 
     if len(intransit)>0:
 #         print('evil bs', intransit, len(intransit), len(np.where(intransit)[0]))
@@ -1774,11 +2643,13 @@ def singles_search(ticid, data_total, intransit = [], catalog_df = False, confid
         params_df = []
 
         for sss in range(len(t0_singles)):
-            print(sss)
+#             print(sss)
             planet_name+=1
 
             if run_1:
                 planet_df.loc[len(planet_df.index)] = [int(ticid), int(planet_name), np.inf, t0_singles[sss], dur_singles[sss], depth_singles[sss]]
+#                 print('planet df singles', planet_df)
+
 
 
             else:
@@ -1786,20 +2657,22 @@ def singles_search(ticid, data_total, intransit = [], catalog_df = False, confid
                 new_params, conv, conv_attempt = pymc_new_general_function(np.array(total_time), total_flux, total_flux_err, t0_singles[sss], [dur_singles[sss], ab, depth_singles[sss]], 'Single')
 
                 if len(new_params)>0:
+                    new_params.loc[len(params_df)] = [None] * len(new_params.columns) 
+
 
                     params_df.append(new_params)
 
 
                     t0_, period_, depth_, tdur_, q = new_params.loc['t0', 'mean'], new_params.loc['Per', 'mean'], new_params.loc['depth', 'mean'], new_params.loc['dur', 'mean'], new_params.loc['SNR', 'mean']
 
-                    print('checking convergence 3')
+#                     print('checking convergence 3')
                     if not np.isnan(t0_):
                         planet_df.loc[len(planet_df.index)] = [int(ticid), int(planet_name), np.inf, t0_, tdur_,depth_, q]
 
                     pd.DataFrame({'TICID':[con.TICID], 't0':[t0_], 'per':[period_], 'depth':[depth_], 'converged': [True], 'conv_on_run':[conv_attempt]}).to_csv('../checking_convergence_output/'+str(con.TICID)+'_'+str(round(t0_, 5))+'_Yconv_single.csv')
 
                 else:
-                    print('checking convergence 4')
+#                     print('checking convergence 4')
 
                     pd.DataFrame({'TICID':[con.TICID], 't0':[t0_singles[sss]], 'per':[np.nan], 'depth':[depth_singles[sss]], 'converged': [False], 'conv_on_run':[np.nan]}).to_csv('../checking_convergence_output/'+str(con.TICID)+'_'+str(round(t0_singles[sss], 5))+'_Nconv_single.csv')
 
@@ -1975,12 +2848,12 @@ def extract_summary_dataframe(trace, hdi_prob=0.68):
     selected_columns = ['mean', 'median', 'sd', 'hdi_16%', 'hdi_84%', 'r_hat']
     custom_summary_df = summary[selected_columns]
     
-    print('custom summary', custom_summary_df)
+#     print('custom summary', custom_summary_df)
 
     return custom_summary_df
 
 
-def sample_until_converged(model, max_attempts=5, rhat_threshold=1.1, chains=4,cores=None, mp_context="spawn"):
+def sample_until_converged(model, max_attempts=3, rhat_threshold=1.1, chains=4,cores=None, mp_context="spawn"):
     # Get all free random variables in the model
     
     cores = min(chains, os.cpu_count() or 1) if cores is None else cores
@@ -1988,14 +2861,14 @@ def sample_until_converged(model, max_attempts=5, rhat_threshold=1.1, chains=4,c
     free_vars = model.free_RVs
     if not free_vars:
         raise ValueError("No free random variables found for sampling.")
-    print('free vars', free_vars)
+#     print('free vars', free_vars)
     # Use Metropolis for all free RVs
 #     step = pm.Metropolis(vars=free_vars)
 
     step = pm.DEMetropolisZ(vars=free_vars)#, target_accept=0.8) 
 
-    for attempt in range(1, max_attempts + 1):
-        print(f"Sampling attempt {attempt}...")
+    for attempt in range(3, max_attempts + 1):
+        print(f"Sampling attempt {attempt-1}...")
         trace = pm.sample(step=step, draws=5000*attempt, tune=2000*attempt, chains=chains, cores = cores, 
             # use a safe, explicit multiprocessing context
             mp_ctx=mp.get_context(mp_context),
@@ -2009,7 +2882,7 @@ def sample_until_converged(model, max_attempts=5, rhat_threshold=1.1, chains=4,c
             return trace, attempt
 #         print('checking nans trace', trace.posterior['SNR'])
         print('checking nanas summary', az.summary(trace))
-        print(f"Attempt {attempt} failed to converge. Retrying...")
+        print(f"Attempt {attempt-1} failed to converge.")
 
     raise RuntimeError("Model did not converge after multiple attempts.")
 
@@ -2287,7 +3160,7 @@ def pymc_new_general_function(time, flux, unc, T0, other_pars, type_fn,
                 per = pm.TruncatedNormal("Per", mu=Per, sigma=P_sigma, lower=P_lower, upper=P_upper)
                 # original line
                 
-                print('con rho_star', con.rho_star, type(con.rho_star))
+#                 print('con rho_star', con.rho_star, type(con.rho_star))
                 fold_this = False
                 a_rs_mu = pm.Deterministic("a_rs_mu", (con.G * con.rho_star * (per ** 2) / 3 /np.pi) ** (1/3))
                 a_rs = pm.TruncatedNormal("a_rs", mu=a_rs_mu, sigma=3., lower=1.0)
@@ -2362,7 +3235,7 @@ def pymc_new_general_function(time, flux, unc, T0, other_pars, type_fn,
             N_tran = pt.sum(intran_mask)
             uq = pt.ones_like(flux) * std_out
             sigs = pt.switch(N_tran > 0, pt.mean(pt.where(intran_mask, uq, 0)), 1e6)
-            print('N_intran', pm.draw(N_tran), 'depth', pm.draw(depth), 'sig', pm.draw(sigs))
+            print('folded: N_intran', pm.draw(N_tran), 'depth', pm.draw(depth), 'sig', pm.draw(sigs))
 
             SNR_val = pt.switch(pt.gt(N_tran, 0), pt.sqrt(N_tran) * depth / sigs, 0)
             SNR_clipped = pt.clip(SNR_val, 0, 1e4)
@@ -2391,7 +3264,7 @@ def pymc_new_general_function(time, flux, unc, T0, other_pars, type_fn,
         az.plot_posterior(trace)
         plt.show()
 
-    print('summary', summary)
+#     print('summary', summary)
     return summary, True, conv_attempt
 
 
@@ -2437,46 +3310,92 @@ def flatten_summary_blocks(F):
     return final_df
     
 
+# def sort_arrays_by_time(total_time, *args):
+# #     for arg in args: 
+# #         print(type(arg))
+# #         print('arg', len(arg))
+# #         print(args[:10])
+#     print('len total time', len(total_time), 'len(arguments)', [len(arg) for arg in args])
+#     return [np.array(arg)[np.argsort(total_time)] for arg in args] 
+
 def sort_arrays_by_time(total_time, *args):
-#     for arg in args: 
-#         print(type(arg))
-#         print('arg', len(arg))
-#         print(args[:10])
-    print('len total time', len(total_time))
-    return [np.array(arg)[np.argsort(total_time)] for arg in args] 
+    total_time = np.asarray(total_time)
+
+    # Skip sorting if already monotonic
+    if np.all(np.diff(total_time) >= 0):
+        return [np.asarray(arg) for arg in args]
+
+    idx = np.argsort(total_time)
+    return [np.asarray(arg)[idx] for arg in args]
 
 def sort_arrays_by_index(index_lst, *args):
     return [[arg[index] for index in index_lst] for arg in args]
 
 
-def bin_by_time_many_args(time,time_size_of_bins, **params):
-    time = np.array(time).byteswap().newbyteorder() 
+# def bin_by_time_many_args(time,time_size_of_bins, **params):
+#     time = np.array(time).byteswap().newbyteorder() 
 
-    interval = time_size_of_bins/60./24.    
+#     interval = time_size_of_bins/60./24.    
     
-    dict_params = {k:np.array(v).byteswap().newbyteorder() for k,v in  params.items()}
-    dict_params['time'] = time        
+#     dict_params = {k:np.array(v).byteswap().newbyteorder() for k,v in  params.items()}
+#     dict_params['time'] = time        
 
-    df = pd.DataFrame(dict_params, dtype=object)
-    df = pd.concat([df, df])
-    numbins = np.array(list(range(int(np.ceil((max(time)-min(time))/interval))+1)))
-    bins = np.array([min(time)+x*interval for x in numbins])
-    df['time_bins'] = pd.cut(df.time, bins)
-    new_time = [x for x in df.groupby('time_bins').mean()['time'] if not math.isnan(x)]
+#     df = pd.DataFrame(dict_params, dtype=object)
+#     df = pd.concat([df, df])
+#     numbins = np.array(list(range(int(np.ceil((max(time)-min(time))/interval))+1)))
+#     bins = np.array([min(time)+x*interval for x in numbins])
+#     df['time_bins'] = pd.cut(df.time, bins)
+#     new_time = [x for x in df.groupby('time_bins').mean()['time'] if not math.isnan(x)]
 
-    new_dict = {'time': new_time}
-    for key, value in params.items():
-        new_arg = [x for x in df.groupby('time_bins').mean()[key] if not math.isnan(x)]
-        new_dict[key] = new_arg
-        
-    return new_time, new_dict
+#     new_dict = {'time': new_time}
+#     for key, value in params.items():
+#         new_arg = [x for x in df.groupby('time_bins').mean()[key] if not math.isnan(x)]
+#         new_dict[key] = new_arg
+# #     print('checking dictionary ', new_dict)
+#     return new_time, new_dict
+
+def bin_by_time_many_args(time, time_size_of_bins, **params):
+    time = np.asarray(time)
+
+    interval = time_size_of_bins / 60. / 24.  # days
+
+    # Precompute bins
+    min_t, max_t = np.min(time), np.max(time)
+    nbins = int(np.ceil((max_t - min_t) / interval)) + 1
+    bins = min_t + np.arange(nbins + 1) * interval
+
+    # Assign each time point to a bin
+    bin_idx = np.digitize(time, bins) - 1
+
+    # Prepare output
+    new_dict = {}
+    new_time = []
+
+    for b in range(nbins):
+        mask = bin_idx == b
+        if not np.any(mask):
+            continue
+
+        new_time.append(np.mean(time[mask]))
+
+        for key, arr in params.items():
+            arr = np.asarray(arr)
+            if key not in new_dict:
+                new_dict[key] = []
+            new_dict[key].append(np.mean(arr[mask]))
+
+    return np.array(new_time), new_dict
 
 
 def bin_data_with_diff_cadences_many_args(total_time, min_cad = 0, **params):
-    time     = np.array(total_time[np.argsort(total_time)])
+
+    # --- NEW: sort once here, not repeatedly ---
+    idx = np.argsort(total_time)
+    time = np.asarray(total_time)[idx]
     for key, value in params.items():
-        params[key] = sort_arrays_by_time(total_time, value)[0]
-    
+        params[key] = np.asarray(value)[idx]
+    # -------------------------------------------
+
     new_time = []
     
     indexes_split_unorganize = breaking_up_data(time, 1.)   
@@ -2489,42 +3408,35 @@ def bin_data_with_diff_cadences_many_args(total_time, min_cad = 0, **params):
         cadences.append(med_cadence)
         
     max_cadence = np.nanmax(cadences)
-#     print('max cadence', max_cadence*60*24)
     
     dict_lst = []
     for indx in indexes_split:
-#         print('len of indx? ', len(indx), len(time))
         filter_dict = {k:np.array(v)[indx] for k,v in  params.items()}
         cad = np.nanmin(np.diff(time[indx]))
-#         print('other cadence', cad*60*24)
-        if np.ceil(cad*60*24)<np.ceil(max_cadence*60*24):
-#             print('need to bin')
-            binned_time, all_params_dict = bin_by_time_many_args(time[indx], max_cadence*60*24, **filter_dict)       
-#             print('these should be different', len(binned_time), len(time[indx]))
+
+        if np.ceil(cad*60*24) < np.ceil(max_cadence*60*24):
+            binned_time, all_params_dict = bin_by_time_many_args(time[indx], max_cadence*60*24, **filter_dict)
             new_time.extend(binned_time)
             dict_lst.append(all_params_dict)
         else:
             new_time.extend(time[indx])
-#             filter_dict['time'] = time[indx]
             dict_lst.append(filter_dict)
 
     binned_dict = {}
     binned_dict['time'] = new_time
 
     for k in dict_lst[0].keys():
-        if k!='time':
-            binned_dict[k] = np.concatenate(list(binned_dict[k] for binned_dict in dict_lst))
-#     print('binned dictionary', binned_dict)
-    binned_args = sort_arrays_by_time(np.array(new_time), *binned_dict.values())
+        if k != 'time':
+            binned_dict[k] = np.concatenate([d[k] for d in dict_lst])
+
+    # --- sorting AFTER binning is still correct ---
+    results = sort_arrays_by_time(np.array(binned_dict['time']), *binned_dict.values())
+    return results
+
+
+def creating_broken_axes_plots_for_DV_report_min_plot(time, flux, err, binned_time, binned_flux, binned_err, gs=False, subplot_val = None, ratios = []):
     
-#     print('these should be different', len(total_time), len(binned_args[0]))
-#     print('num args', len(binned_args))
-    return binned_args
 
-
-
-def creating_broken_axes_plots_for_DV_report_min_plot(time, flux, err, binned_time = [], binned_flux=[], binned_err = [], gs=False, subplot_val = None, ratios = []):
-    
     
     if len(ratios)==0:
         diff_time_arrays = np.array([max(x)-min(x) for x in split_times])
@@ -2539,9 +3451,6 @@ def creating_broken_axes_plots_for_DV_report_min_plot(time, flux, err, binned_ti
         axes = [plt.subplot(gs[subplot_val, x]) for x in range(len(ratios))]
         
         
-    if len(binned_time) == 0:
-        binned_time, binned_flux, binned_err = bin_data_with_diff_cadences_many_args(time, flux = flux, err = err)
-
     indexes_split = breaking_up_data(time)   
     binned_indexes_split = breaking_up_data(binned_time)   
 
@@ -2636,13 +3545,21 @@ def creating_first_DV_report_page(ticid, data_filename, planet_df, catalog_df, i
         df = pd.read_csv(data_filename)
         time, flux, err, trend, raw, raw_err = [np.array(df[col]) for col in ['TIME', 'FLUX', 'FLUX_ERR', 'FLUX_TREND', 'RAW_FLUX', 'RAW_FLUX_ERR']]
         
+        print('checking lengths', [len(x) for x in [time, flux, err, trend, raw, raw_err]])
+        
+        if len(err) != len(flux):
+            err = np.full(len(flux), np.std(flux))
+            print('Error')
+        
         binned_time, binned_flux, binned_err,  binned_trend, binned_raw, binned_rerr = bin_data_with_diff_cadences_many_args(time, flux = flux, err = err, trend = trend, raw = raw, raw_err = raw_err)
-#         print('binned_times', binned_times)
+
         indexes_split = breaking_up_data(time)   
-    #     indexes_split = sorted(indexes_split_unorganize, key=lambda x: min(x), reverse=True)
+
         binned_indexes_split = breaking_up_data(binned_time)   
-    #     binned_indexes_split = sorted(binned_indexes_split_unorganize, key=lambda x: min(x), reverse=True)
-        split_times, split_fluxes, split_err, split_raw, split_rerr = sort_arrays_by_index(indexes_split, time, flux, err, raw, raw_err)
+
+        split_times, split_fluxes, split_err, split_raw, split_rerr = sort_arrays_by_index(indexes_split, time, flux,
+                                                                                           err, raw, raw_err)
+        
         binned_split_times, binned_split_fluxes, binned_split_err, binned_split_raw, binned_split_rerr = sort_arrays_by_index(binned_indexes_split, binned_time, binned_flux, binned_err, binned_raw, binned_rerr)
 
         diff_time_arrays = np.array([max(x)-min(x) for x in split_times])
@@ -2674,8 +3591,10 @@ def creating_first_DV_report_page(ticid, data_filename, planet_df, catalog_df, i
 
         subplot = 0
         
-        axes1  =creating_broken_axes_plots_for_DV_report_min_plot(time, raw, raw_err, binned_time, binned_raw, binned_rerr, gs0, subplot, ratios)
-
+        axes1 = creating_broken_axes_plots_for_DV_report_min_plot(
+            time, raw, raw_err,
+            binned_time, binned_raw, binned_rerr,
+            gs0, subplot, ratios)
         axes = axes1
 
         for ax in axes1:
@@ -2696,10 +3615,18 @@ def creating_first_DV_report_page(ticid, data_filename, planet_df, catalog_df, i
 
         if len(per_planets_df)>0:
             
-            axes2  =creating_broken_axes_plots_for_DV_report_min_plot(time, flux, err,binned_time, binned_flux, binned_err, gs0, subplot, ratios)
+
+            axes2 = creating_broken_axes_plots_for_DV_report_min_plot(
+                time, flux, err,
+                binned_time, binned_flux, binned_err,
+                gs0, subplot, ratios)
 
             for ax in axes2:
-                ax.set_ylim(ymin2, ymax2)
+                try:
+                    ax.set_ylim(ymin2, ymax2)
+                except Exception as e:
+                    print(e)
+                    print(f'ymin: {ymin2}, ymax: {ymax2}, Error')
                 min_vals, max_vals = ax.get_xlim()
                 split_time = time[(time>min_vals) & (time<max_vals)]
                 cad = np.min(np.diff(split_time))
@@ -2724,8 +3651,11 @@ def creating_first_DV_report_page(ticid, data_filename, planet_df, catalog_df, i
 
         if len(single_planet_df)>0:
 
-            axes3  = creating_broken_axes_plots_for_DV_report_min_plot(times_ot, fluxes_ot, err_ot, binned_time_ot,binned_flux_ot, binned_err_ot, gs0, subplot, ratios)
-
+            axes3 = creating_broken_axes_plots_for_DV_report_min_plot(
+                times_ot, fluxes_ot, err_ot,
+                binned_time_ot, binned_flux_ot, binned_err_ot,
+                gs0, subplot, ratios
+            )
             for ax in axes3:
                 min_vals, max_vals = ax.get_xlim()
                 split_time = times_ot[(times_ot>min_vals) & (times_ot<max_vals)]
@@ -2751,67 +3681,67 @@ def creating_first_DV_report_page(ticid, data_filename, planet_df, catalog_df, i
             
         subplot +=1
 
-        if APER:
-            subplot+=1
-            time, flux, err = pd.read_csv(glob.glob(outdir+'*APER*.csv'))
+#         if APER:
+#             subplot+=1
+#             time, flux, err = pd.read_csv(glob.glob(outdir+'*APER*.csv'))
             
-            binned_time, binned_flux, binned_err = bin_data_with_diff_cadences_many_args( time, flux = flux, err = err)
-#             print('binned_times', binned_time)
+#             binned_time, binned_flux, binned_err = bin_data_with_diff_cadences_many_args( time, flux = flux, err = err)
+# #             print('binned_times', binned_time)
             
-            indexes_split = breaking_up_data(time)   
-            binned_indexes_split = breaking_up_data(binned_time)   <ma
+#             indexes_split = breaking_up_data(time)   
+#             binned_indexes_split = breaking_up_data(binned_time)   <ma
     
-            split_times, split_fluxes, split_err, split_raw, split_rerr = sort_arrays_by_index(indexes_split, time, flux, err, raw, raw_err)
-            binned_split_times, binned_split_fluxes, binned_split_err, binned_split_raw, binned_split_rerr = sort_arrays_by_index(binned_indexes_split, binned_time, binned_flux, binned_err)
-            axes_n = creating_broken_axes_plots_for_DV_report_min_plot(time, flux, err,binned_time, binned_flux, binned_err, gs0, subplot, ratios)
-            for ax in axes_n:
-                ax.set_ylim(ymin2, ymax2)
-                min_vals, max_vals = ax.get_xlim()
-                split_time = times_ot[(times_ot>min_vals) & (times_ot<max_vals)]
-                cad = np.min(np.diff(split_time))
-            axes = axes+axes_n
+#             split_times, split_fluxes, split_err, split_raw, split_rerr = sort_arrays_by_index(indexes_split, time, flux, err, raw, raw_err)
+#             binned_split_times, binned_split_fluxes, binned_split_err, binned_split_raw, binned_split_rerr = sort_arrays_by_index(binned_indexes_split, binned_time, binned_flux, binned_err)
+#             axes_n = creating_broken_axes_plots_for_DV_report_min_plot(time, flux, err,binned_time, binned_flux, binned_err, gs0, subplot, ratios)
+#             for ax in axes_n:
+#                 ax.set_ylim(ymin2, ymax2)
+#                 min_vals, max_vals = ax.get_xlim()
+#                 split_time = times_ot[(times_ot>min_vals) & (times_ot<max_vals)]
+#                 cad = np.min(np.diff(split_time))
+#             axes = axes+axes_n
 
-        if eleanor:
-            subplot+=1
+#         if eleanor:
+#             subplot+=1
 
-            time, flux, err = pd.read_csv(glob.glob(outdir+'*eleanor*.csv'))
+#             time, flux, err = pd.read_csv(glob.glob(outdir+'*eleanor*.csv'))
             
-            binned_time, binned_flux, binned_err = bin_data_with_diff_cadences_many_args( time, flux = flux, err = err)
-#             print('binned_time', binned_time)
+#             binned_time, binned_flux, binned_err = bin_data_with_diff_cadences_many_args( time, flux = flux, err = err)
+# #             print('binned_time', binned_time)
             
-            indexes_split = breaking_up_data(time)   
-            binned_indexes_split = breaking_up_data(binned_time)   
+#             indexes_split = breaking_up_data(time)   
+#             binned_indexes_split = breaking_up_data(binned_time)   
     
-            split_times, split_fluxes, split_err, split_raw, split_rerr = sort_arrays_by_index(indexes_split, time, flux, err, raw, raw_err)
-            binned_split_times, binned_split_fluxes, binned_split_err, binned_split_raw, binned_split_rerr = sort_arrays_by_index(binned_indexes_split, binned_time, binned_flux, binned_err)
-            axes_n = creating_broken_axes_plots_for_DV_report_min_plot(time, flux, err,binned_time, binned_flux, binned_err, gs0, subplot, ratios)
-            for ax in axes_n:
-                ax.set_ylim(ymin2, ymax2)
-                min_vals, max_vals = ax.get_xlim()
-                split_time = times_ot[(times_ot>min_vals) & (times_ot<max_vals)]
-                cad = np.min(np.diff(split_time))
-            axes = axes+axes_n
+#             split_times, split_fluxes, split_err, split_raw, split_rerr = sort_arrays_by_index(indexes_split, time, flux, err, raw, raw_err)
+#             binned_split_times, binned_split_fluxes, binned_split_err, binned_split_raw, binned_split_rerr = sort_arrays_by_index(binned_indexes_split, binned_time, binned_flux, binned_err)
+#             axes_n = creating_broken_axes_plots_for_DV_report_min_plot(time, flux, err,binned_time, binned_flux, binned_err, gs0, subplot, ratios)
+#             for ax in axes_n:
+#                 ax.set_ylim(ymin2, ymax2)
+#                 min_vals, max_vals = ax.get_xlim()
+#                 split_time = times_ot[(times_ot>min_vals) & (times_ot<max_vals)]
+#                 cad = np.min(np.diff(split_time))
+#             axes = axes+axes_n
 
-        if len(other_pipelines)>0:
-            for pip in other_pipelines:
-                subplot+=1
-                time, flux, err = pd.read_csv(glob.glob(outdir+'*'+pip+'*.csv'))
+#         if len(other_pipelines)>0:
+#             for pip in other_pipelines:
+#                 subplot+=1
+#                 time, flux, err = pd.read_csv(glob.glob(outdir+'*'+pip+'*.csv'))
             
-                binned_time, binned_flux, binned_err = bin_data_with_diff_cadences_many_args( time, flux = flux, err = err)
-#                 print('binned_time', binned_time)
+#                 binned_time, binned_flux, binned_err = bin_data_with_diff_cadences_many_args( time, flux = flux, err = err)
+# #                 print('binned_time', binned_time)
 
-                indexes_split = breaking_up_data(time)   
-                binned_indexes_split = breaking_up_data(binned_time)   
+#                 indexes_split = breaking_up_data(time)   
+#                 binned_indexes_split = breaking_up_data(binned_time)   
 
-                split_times, split_fluxes, split_err, split_raw, split_rerr = sort_arrays_by_index(indexes_split, time, flux, err, raw, raw_err)
-                binned_split_times, binned_split_fluxes, binned_split_err, binned_split_raw, binned_split_rerr = sort_arrays_by_index(binned_indexes_split, binned_time, binned_flux, binned_err)
-                axes_n = creating_broken_axes_plots_for_DV_report_min_plot(time, flux, err,binned_time, binned_flux, binned_err, gs0, subplot, ratios)
-                for ax in axes_n:
-                    ax.set_ylim(ymin2, ymax2)
-                    min_vals, max_vals = ax.get_xlim()
-                    split_time = times_ot[(times_ot>min_vals) & (times_ot<max_vals)]
-                    cad = np.min(np.diff(split_time))
-                axes = axes+axes_n
+#                 split_times, split_fluxes, split_err, split_raw, split_rerr = sort_arrays_by_index(indexes_split, time, flux, err, raw, raw_err)
+#                 binned_split_times, binned_split_fluxes, binned_split_err, binned_split_raw, binned_split_rerr = sort_arrays_by_index(binned_indexes_split, binned_time, binned_flux, binned_err)
+#                 axes_n = creating_broken_axes_plots_for_DV_report_min_plot(time, flux, err,binned_time, binned_flux, binned_err, gs0, subplot, ratios)
+#                 for ax in axes_n:
+#                     ax.set_ylim(ymin2, ymax2)
+#                     min_vals, max_vals = ax.get_xlim()
+#                     split_time = times_ot[(times_ot>min_vals) & (times_ot<max_vals)]
+#                     cad = np.min(np.diff(split_time))
+#                 axes = axes+axes_n
     
 
             

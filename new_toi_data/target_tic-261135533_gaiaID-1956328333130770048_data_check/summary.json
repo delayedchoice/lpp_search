@@ -1,0 +1,15 @@
+{
+  "_schema": {
+    "name": "summary",
+    "version": "1.0.0"
+  },
+  "target_id": "TIC 261135533",
+  "status": "no_candidates",
+  "counts": {
+    "n_candidates_total": 0,
+    "n_fit_attempts": 0,
+    "n_converged": 0
+  },
+  "runtime_sec": 5.584107160568237,
+  "fits": []
+}

@@ -1,2 +1,14 @@
 TICID,time_to_run,split_searches
 230055368,101.30859422683716,"(array([], dtype=int64),)"
+TICID,time_to_run,split_searches
+230055368,101.33809113502502,"(array([], dtype=int64),)"
+TICID,time_to_run,split_searches
+230055368,101.5000147819519,"(array([], dtype=int64),)"
+TICID,time_to_run,split_searches
+230055368,102.08467888832092,"(array([], dtype=int64),)"
+TICID,time_to_run,split_searches
+230055368,101.32648158073425,"(array([], dtype=int64),)"
+TICID,time_to_run,split_searches
+230055368,625.3774104118347,"(array([  24,   25,   26, ..., 3519, 3520, 3521]),)"
+TICID,time_to_run,split_searches
+230055368,101.26571726799011,"(array([], dtype=int64),)"

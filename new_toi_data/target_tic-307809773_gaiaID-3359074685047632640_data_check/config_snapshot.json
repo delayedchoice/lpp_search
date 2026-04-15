@@ -1,0 +1,18 @@
+{
+  "_schema": {
+    "name": "config_snapshot",
+    "version": "1.0.0"
+  },
+  "target_id": "TIC 307809773",
+  "gaia_id": "3359074685047632640",
+  "timestamp": "2026-04-11T01:27:41Z",
+  "modules_used": [
+    "catalog_lookup",
+    "periodic_search",
+    "single_search",
+    "pymc_fit"
+  ],
+  "inputs": {
+    "target_dir": "../new_toi_data/target_tic-307809773_gaiaID-3359074685047632640_data_check"
+  }
+}

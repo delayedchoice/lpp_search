@@ -1,0 +1,70 @@
+{
+  "_schema": {
+    "name": "summary",
+    "version": "1.0.0"
+  },
+  "target_id": "TIC 359271092",
+  "status": "converged",
+  "counts": {
+    "n_candidates_total": 8,
+    "n_fit_attempts": 6,
+    "n_converged": 6
+  },
+  "runtime_sec": 15942.53041267395,
+  "fits": [
+    {
+      "planet_name": 2,
+      "ptype": "Period",
+      "t0": 1552.639,
+      "period": 25.921,
+      "snr": 961.833,
+      "converged": true,
+      "conv_on_run": true
+    },
+    {
+      "planet_name": 3,
+      "ptype": "Period",
+      "t0": 1547.487,
+      "period": 43.522,
+      "snr": 467.814,
+      "converged": true,
+      "conv_on_run": true
+    },
+    {
+      "planet_name": 5,
+      "ptype": "Period",
+      "t0": 2287.909,
+      "period": 3.737,
+      "snr": 550.369,
+      "converged": true,
+      "conv_on_run": true
+    },
+    {
+      "planet_name": 6,
+      "ptype": "Period",
+      "t0": 2286.99,
+      "period": 4.482,
+      "snr": 316.645,
+      "converged": true,
+      "conv_on_run": true
+    },
+    {
+      "planet_name": 7,
+      "ptype": "Period",
+      "t0": 1548.027,
+      "period": 15.356,
+      "snr": 382.523,
+      "converged": true,
+      "conv_on_run": true
+    },
+    {
+      "planet_name": 8,
+      "ptype": "Single",
+      "t0": 1546.805,
+      "period": 786.536,
+      "snr": 14.801,
+      "converged": true,
+      "conv_on_run": true
+    }
+  ]
+}
