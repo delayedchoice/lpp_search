@@ -16,6 +16,8 @@ class PipelineStage(Enum):
     EXTRACTED = auto()
     MERGED = auto()     # singles gate
     SEARCHED = auto()   # quick singles done
+    FITTED = auto()   # MCMC fit run
+    REPORTED = auto()   # DV report PDF made; candidate summary ready; ready for vetting and follow-up
 
 class DataSource(Enum):
     TGLC = "TGLC"
@@ -124,6 +126,18 @@ class Target:
             except Exception:
                 self.quick_singles_t0 = []
 
+    @property
+    def ld_u1_u2(self):
+        """
+        Quadratic limb-darkening coefficients (u1,u2) for this star.
+        Expected to be cached in the catalog row as aLSM/bLSM by DataPrep.ensure_catalog().
+        """
+        u1 = getattr(self, "aLSM", None)
+        u2 = getattr(self, "bLSM", None)
+        if u1 is None or u2 is None:
+            raise ValueError("Limb darkening not available: missing aLSM/bLSM on Target. Run DataPrep.ensure_catalog().")
+        return float(u1), float(u2)
+        
     # -------- convenience --------
     def set_stage(self, stage: PipelineStage) -> None:
         self.pipeline_stage = stage
@@ -188,3 +202,27 @@ class Target:
                 if isinstance(d, dict):
                     out.append(PlanetCandidate.from_dict(d))
         return out
+
+        # inside Target class (core/target.py)
+
+    def stage_rank(self) -> int:
+        order = {
+            PipelineStage.RAW: 0,
+            PipelineStage.EXTRACTED: 1,
+            PipelineStage.MERGED: 2,
+            PipelineStage.SEARCHED: 3,
+            PipelineStage.FITTED: 4,
+            PipelineStage.REPORTED: 5,
+        }
+        return order.get(self.pipeline_stage, -1)
+
+    def stage_at_least(self, stage: PipelineStage) -> bool:
+        order = {
+            PipelineStage.RAW: 0,
+            PipelineStage.EXTRACTED: 1,
+            PipelineStage.MERGED: 2,
+            PipelineStage.SEARCHED: 3,
+            PipelineStage.FITTED: 4,
+            PipelineStage.REPORTED: 5,
+        }
+        return order.get(self.pipeline_stage, -1) >= order.get(stage, 10)

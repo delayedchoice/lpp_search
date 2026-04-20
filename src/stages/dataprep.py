@@ -32,7 +32,7 @@ def match_logg_and_teff_for_LDC(df: pd.DataFrame) -> pd.DataFrame:
         aLSM, bLSM = pool.loc[j, ['aLSM', 'bLSM']]
         a.append(float(aLSM)); b.append(float(bLSM))
     df['aLSM'] = a; df['bLSM'] = b
-    return df  # [1](https://unmm-my.sharepoint.com/personal/malharris19_unm_edu/Documents/Microsoft%20Copilot%20Chat%20Files/Functions_all.py)
+    return df  # [
 
 def get_catalog_info(ticid: int, rtrn_df: bool=False) -> pd.DataFrame | tuple:
     mdwarfs = pd.read_csv(con.MDWARF_CATALOG, iterator=True, chunksize=100000)
@@ -41,11 +41,11 @@ def get_catalog_info(ticid: int, rtrn_df: bool=False) -> pd.DataFrame | tuple:
     return new_df if rtrn_df else (
         new_df[['aLSM','bLSM']].values[0].astype(float),
         float(new_df['Mass']), float(new_df['Rad'])
-    )  # [1](https://unmm-my.sharepoint.com/personal/malharris19_unm_edu/Documents/Microsoft%20Copilot%20Chat%20Files/Functions_all.py)
+    )  
 
 # ---- basic cleaning & flattening ----
 def remove_outliers(time, flux, sigma_lower=6.0, sigma_upper=3.0, **kwargs):
-    return sigma_clip(flux, sigma_lower=sigma_lower, sigma_upper=sigma_upper, **kwargs).mask  # [1](https://unmm-my.sharepoint.com/personal/malharris19_unm_edu/Documents/Microsoft%20Copilot%20Chat%20Files/Functions_all.py)
+    return sigma_clip(flux, sigma_lower=sigma_lower, sigma_upper=sigma_upper, **kwargs).mask  
 
 def T14(P, R_star, M_star, R_planet, b=0, i=90*units.deg):
     # Short wrapper; same math as your original
@@ -56,7 +56,7 @@ def T14(P, R_star, M_star, R_planet, b=0, i=90*units.deg):
     k = (R_planet / R_star).decompose().value
     i = i.to(units.rad).value
     val = (R_star / a).decompose().value * np.sqrt((1 + k)**2 - b**2) / np.sin(i)
-    return ((P.to(units.s) / np.pi) * np.arcsin(val)).to(units.day).value  # [1](https://unmm-my.sharepoint.com/personal/malharris19_unm_edu/Documents/Microsoft%20Copilot%20Chat%20Files/Functions_all.py)
+    return ((P.to(units.s) / np.pi) * np.arcsin(val)).to(units.day).value  
 
 def flatten_lc(time, flux, catalog_df=pd.DataFrame({'Rad':[-1],'Mass':[-1]}), maxP=100, R_planet_RE=2):
     if len(catalog_df) > 0:
@@ -68,7 +68,7 @@ def flatten_lc(time, flux, catalog_df=pd.DataFrame({'Rad':[-1],'Mass':[-1]}), ma
     if not np.isfinite(R_star) or R_star <= 0: R_star = 0.5
     windw = 3 * T14(P=maxP, R_star=R_star, M_star=M_star, R_planet=2*R_planet_RE)
     flat_flux, trend = flatten(time, flux, method='biweight', window_length=windw, return_trend=True)
-    return flat_flux, trend  # [1](https://unmm-my.sharepoint.com/personal/malharris19_unm_edu/Documents/Microsoft%20Copilot%20Chat%20Files/Functions_all.py)
+    return flat_flux, trend  
 
 def extract_data_from_fits_files(fitsFile, PL="", sector=0):
     with apf.open(fitsFile) as hdulist:
@@ -105,7 +105,7 @@ def extract_data_from_fits_files(fitsFile, PL="", sector=0):
     outdir = os.path.dirname(fitsFile); os.makedirs(outdir, exist_ok=True)
     outname = f"{outdir}/{PL}{os.path.basename(outdir)}_sector{int(sector):02d}.csv"
     df.to_csv(outname, index=False)
-    return df  # [1](https://unmm-my.sharepoint.com/personal/malharris19_unm_edu/Documents/Microsoft%20Copilot%20Chat%20Files/Functions_all.py)
+    return df  
 
 def get_data(ticid_directory, flux_type="APER_", PL="TGLC", verbose=False, catalog_df=False):
     files = sorted(glob.glob(f"{ticid_directory}/*_sector*.csv"))
@@ -147,7 +147,7 @@ def get_data(ticid_directory, flux_type="APER_", PL="TGLC", verbose=False, catal
     })
     outname = f"{ticid_directory}/{os.path.basename(ticid_directory)}_{PL}_{flux_type}total.csv"
     out.to_csv(outname, index=False)
-    return out  # [1](https://unmm-my.sharepoint.com/personal/malharris19_unm_edu/Documents/Microsoft%20Copilot%20Chat%20Files/Functions_all.py)
+    return out  
 
 # ---- DataPrep class ----
 @dataclass

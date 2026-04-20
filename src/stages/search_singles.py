@@ -182,12 +182,10 @@ def singles_search(target, *, cfg=SinglesSearchConfig(), run_1=True,
 
     # choose run_id/run_path (finalize should pass these)
     if run_id is None:
-        run_id = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-    if run_path is None:
-        out_dir = target.root_dir / "candidates"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        run_path = out_dir / f"run_{run_id}.json"
+        run_id = target.new_run_id()
 
+    run_path = target.candidates_run_path(run_id)    
+    
     payload_update = {
         "run_id": run_id,
         "ticid": int(target.ticid),

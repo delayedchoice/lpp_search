@@ -31,6 +31,7 @@ from utils.running_median import running_median
 from utils.run_json import upsert_run_json
 from utils.segments import breaking_up_data
 
+
 @dataclass
 class PeriodicSearchConfig:
     flavour: str = "TGLC"
@@ -201,15 +202,17 @@ def evaluate_best_peak(model, results, idx, power_final, cfg, accepted_events):
             np.std(power_final),
             sst.median_abs_deviation(results.power)
         ])
-    snr =  float(power_final/(mad/0.67))
+
+    snr_arr = power_final / (mad / 0.67)
+    snr = float(snr_arr[idx])
     
     sde  = (power_final[idx] - np.mean(power_final)) / np.std(power_final)
     # threshold gate
 
     if cfg.verbose:
-        print(f"Candidate: P={period:.4f} d, SDE={sde:.2f} (min {cfg.min_sde}), SNR={snr[idx]:.2f} (min {cfg.min_snr})")
+        print(f"Candidate: P={period:.4f} d, SDE={sde:.2f} (min {cfg.min_sde}), SNR={snr:.2f} (min {cfg.min_snr})")
 
-    if (snr[idx] is None) or (snr[idx] < cfg.min_snr) or (sde < cfg.min_sde):
+    if (snr is None) or (snr < cfg.min_snr) or (sde < cfg.min_sde):
         return ("fail_threshold", None, period, t0, duration, None)
 
     # supported transit times (your B choice)
@@ -253,7 +256,7 @@ def evaluate_best_peak(model, results, idx, power_final, cfg, accepted_events):
     if cfg.plots:
 
         plt.figure(figsize = (10, 6))
-        val_triangles = min(snr)-np.std(snr)
+        val_triangles = min(snr_arr)-np.std(snr_arr)
         ax = plt.gca()
         ax.scatter(period, val_triangles, color = 'r', marker = '^', s=20, zorder = 10)
 
@@ -264,7 +267,7 @@ def evaluate_best_peak(model, results, idx, power_final, cfg, accepted_events):
         plt.ylabel(r'SNR')#, fontsize = 40)
         plt.xlabel('Period (days)')#, fontsize = 40)
 
-        ax.plot(results.period, snr, color = 'k', lw=0.65)
+        ax.plot(results.period, snr_arr, color = 'k', lw=0.65)
 
         plt.show()
         plt.close()
@@ -459,18 +462,20 @@ def run_periodic_full_and_chunked(time, flux, flux_err, cfg, accepted_events=Non
     # Sort blocks by size (your legacy approach does this) 
     blocks = sorted(blocks, key=lambda idx: len(idx), reverse=True)
 
-    for idx in blocks:
+    for idx in blocks[:4]:  # keep your legacy cap on number of chunks
         if len(idx) < 50:
             continue
         t_seg = time[idx]
+        if np.ptp(t_seg)<20:
+            continue
         f_seg = flux[idx]
         fe_seg = flux_err[idx] if flux_err is not None else None
 
         # Run recursive BLS on this segment
-        accepted_seg, _ = using_BLS_search(t_seg, f_seg, flux_err=fe_seg, cfg=cfg, accepted_events=accepted_events)
+        
+        accepted_events, _ = using_BLS_search(t_seg, f_seg, flux_err=fe_seg, cfg=cfg, accepted_events=accepted_events)
 
         # Merge in new ones (dedupe later)
-        accepted_events.extend(list(accepted_seg))
 
     return accepted_events
 
@@ -495,11 +500,9 @@ def periodic_search(target, *, cfg=PeriodicSearchConfig(), seed_periods=None,
 
     # choose run_id/run_path (finalize should pass these)
     if run_id is None:
-        run_id = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-    if run_path is None:
-        out_dir = target.root_dir / "candidates"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        run_path = out_dir / f"run_{run_id}.json"
+        run_id = target.new_run_id()
+
+    run_path = target.candidates_run_path(run_id)    
 
     # ---- NEXT STEP will replace this stub with your recursive BLS ----
 

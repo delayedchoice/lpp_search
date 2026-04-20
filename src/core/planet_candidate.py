@@ -132,3 +132,20 @@ class PlanetCandidate:
             notes=str(d.get("notes", "")),
             default=bool(d.get("default", True)),
         )
+
+        from core.planet_candidate import PlanetCandidate
+
+    def single_candidates_from_dt_events(events, *, source="DT"):
+        out = []
+        for e in events:
+            out.append(PlanetCandidate(
+                ptype="Single",
+                t0_days=float(e.t0_days),
+                period_days=None,
+                duration_days=float(e.duration_days),
+                depth=float(e.depth),
+                snr=None if e.snr is None else float(e.snr),
+                source=source,
+                fit_is_current=False,
+            ))
+        return out
