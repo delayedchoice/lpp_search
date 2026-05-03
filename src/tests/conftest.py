@@ -1,10 +1,17 @@
 # tests/conftest.py
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
 import os
-import types
 import numpy as np
 import pandas as pd
 import pytest
 from pathlib import Path
+import datetime
+from enum import Enum, auto
+
 
 @pytest.fixture
 def tmp_workdir(tmp_path, monkeypatch):
@@ -14,11 +21,12 @@ def tmp_workdir(tmp_path, monkeypatch):
     yield tmp_path
     os.chdir(cwd)
 
+
 @pytest.fixture
 def fake_ldc_table(monkeypatch):
-    """Provide a small LDC table via config.LDC_PARAMS_MDWARF."""
+    """Provide a small LDC table."""
     import importlib
-    config = importlib.import_module("config")
+    config = importlib.import_module("utils.config")
     ldc = pd.DataFrame({
         "Teff": [3200, 3400, 3600, 3800],
         "logg": [4.8, 4.9, 5.0, 5.1],
@@ -28,11 +36,12 @@ def fake_ldc_table(monkeypatch):
     monkeypatch.setattr(config, "LDC_PARAMS_MDWARF", ldc, raising=False)
     return ldc
 
+
 @pytest.fixture
 def fake_mdwarf_catalog(monkeypatch, tmp_workdir):
-    """Provide config.MDWARF_CATALOG path and file with TIC row."""
+    """Provide config.MDWARF_CATALOG path."""
     import importlib
-    config = importlib.import_module("config")
+    config = importlib.import_module("utils.config")
     catalog_path = tmp_workdir / "mdwarf_catalog.csv"
     df = pd.DataFrame({
         "TICID": [123456789],
@@ -47,46 +56,124 @@ def fake_mdwarf_catalog(monkeypatch, tmp_workdir):
     monkeypatch.setattr(config, "MDWARF_CATALOG", str(catalog_path), raising=False)
     return catalog_path
 
+
 @pytest.fixture
 def stub_T14(monkeypatch):
-    """
-    Stub transit duration function so window length is predictable.
-    """
-    import importlib
-    dp = importlib.import_module("stages.dataprep")
+    """Stub transit duration function."""
+    from stages import dataprep
     def _T14(P, R_star, M_star, R_planet):
-        # Return something deterministic in days; keep scale ~hours
-        #  e.g., ~3 hours = 0.125 day for default values
         return 0.125
-    monkeypatch.setattr(dp, "T14", _T14, raising=True)
+    monkeypatch.setattr(dataprep, "T14", _T14, raising=True)
     return _T14
+
 
 @pytest.fixture
 def stub_flatten(monkeypatch):
-    """
-    Stub flatten(time, flux, method, window_length, return_trend=True)
-    Returns (flat_flux, trend) where flat=flux/median(trend)=~1 with small noise.
-    """
-    import importlib
-    dp = importlib.import_module("stages.dataprep")
+    """Stub flatten with simple median trend."""
+    from stages import dataprep
 
     def _flatten(time, flux, method=None, window_length=None, return_trend=True, **kwargs):
-        # Simple moving median trend around 1.0 for predictable outputs
         trend = np.full_like(flux, np.nanmedian(flux))
         flat = flux / (trend + 1e-12)
         return (flat, trend) if return_trend else flat
 
-    monkeypatch.setattr(dp, "flatten", _flatten, raising=True)
+    monkeypatch.setattr(dataprep, "flatten", _flatten, raising=True)
     return _flatten
+
 
 @pytest.fixture
 def stub_fits(monkeypatch):
-    """
-    Stub astropy.io.fits.open to yield a fake HDU with a table-like data object.
-    We'll synthesize columns needed by extract_data_from_fits_files.
-    """
-    class FakeColumn:
-        def __init__(self, name): self.name = name
+    """Stub astropy.io.fits.open."""
+    from astropy.io import fits as apf
 
-    class FakeTable:
-        def __init__(self, data, cols):
+    class MockHDUList:
+        def __iter__(self):
+            t = apf.BinTableHDU()
+            t.header["EXTNAME"] = ("TABLE", "extension name")
+            t.data = np.array([(1.0, 10.0, 1.0e-4, 1.0e-5, 0.1e-4, 0.9e-4)], dtype=[("TIME", "f8"), ("MJD", "f8"), ("FLUX", "f8"), ("BKG_FLUX", "f8"), ("FLUX_ERR", "f8"), ("FLUX_TREND", "f8")])
+            self.table = t
+            yield self.table
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+
+    def _mock_open(path):
+        return MockHDUList()
+
+    monkeypatch.setattr("astropy.io.fits.open", _mock_open)
+
+
+@pytest.fixture
+def TinyTarget(monkeypatch, tmp_path):
+    """Simplified Target for testing fixtures."""
+    class FakeStage(Enum):
+        RAW = auto()
+        SEARCHED = auto()
+        DT_PRELIM = auto()
+        FIT = auto()
+        REFINE = auto()
+        FINISHED = auto()
+
+    class TinyTarget:
+        def __init__(self, ticid, root_dir):
+            self.ticid = ticid
+            self.root_dir = root_dir
+            self.stage = FakeStage.RAW
+            self._catalog = {}
+            self.catalog = {}
+            self.source_fits = []
+            self.dt_prelim_found = False
+
+        def save_state(self):
+            pass
+
+        def load_state(self):
+            pass
+
+        def set_stage(self, stage):
+            self.stage = stage
+
+        def stage_at_least(self, stage):
+            stages = [e.name for e in FakeStage]
+            return stages.index(self.stage.name) >= stages.index(stage.name)
+
+        def _compute_rho_star_if_possible(self):
+            pass
+
+        def get_catalog_info(self, ticid, return_df=False):
+            if return_df:
+                return pd.DataFrame({"Mass": [0.45], "Rad": [0.48]})
+            return {}
+
+        @property
+        def candidates_run_id(self):
+            return f"run_{self.ticid}"
+
+        def discover_ids_from_dirname(cls, dir_path):
+            return (int(dir_path.stem.split("-")[1]), "TGLC")
+
+        def new_run_id(self):
+            self._run_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            return self._run_id
+
+        def candidates_dir(self):
+            return self.root_dir
+
+        def candidates_run_path(self, run_id):
+            return self.root_dir / f"candidates_{run_id}.json"
+
+        def save_candidates(self, run_id, candidates):
+            pass
+
+        def load_candidates(self, path=None):
+            return []
+
+        def stage_rank(self):
+            stages = ["RAW", "SEARCHED", "DT_PRELIM", "FIT", "REFINE", "FINISHED"]
+            return stages.index(self.stage.name)
+
+        def __post_init__(self):
+            pass
+
+    return TinyTarget

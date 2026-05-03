@@ -14,7 +14,7 @@ from astropy import units
 from wotan import flatten
 
 from core.target import Target, PipelineStage, DataSource
-import lpp_search.src.utils.config as con
+import utils.config as con
 
 # ---- LDC helpers (trimmed from Functions_all.py) ----
 def match_logg_and_teff_for_LDC(df: pd.DataFrame) -> pd.DataFrame:

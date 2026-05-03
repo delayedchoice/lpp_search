@@ -1,0 +1,35 @@
+# LPP Search Exoplanet Detection Pipeline Dependencies
+# Generated from source code analysis
+# Installation: pip install -r requirements.txt
+
+# Core numerical and data handling
+numpy==2.4.4
+pandas==2.3.3
+
+# Transit modeling and light curve analysis
+batman-package==2.5.3
+deep-transit==0.1.0
+lightkurve==2.6.0
+wotan==1.10
+
+# MCMC sampling
+emcee==3.1.6
+
+# Plotting and visualization
+matplotlib==3.10.9
+mpl-axes-aligner==1.3
+corner==2.2.3
+
+# Scientific computing
+scipy==1.17.1
+numba==0.65.1
+
+# Astronomy toolkit and data access
+astropy==7.2.0
+astroquery==0.4.11
+pyvo==1.8.1
+
+# HTTP requests (for data retrieval)
+requests==2.33.1
+# Test dependencies
+pytest==8.3.5
