@@ -350,23 +350,37 @@ def run_fit_refine_for_target(target: Target, global_csv_path: Path) -> None:
     print(f"[DONE] {target.root_dir.name}: wrote {per_target_csv} and appended to {global_csv_path}")
 
 
-def main(idx: int) -> None:
+def main(idx_or_path: str | int | None = None) -> None:
     dirs = sorted(glob.glob(TARGET_GLOB))
-    if not (0 <= idx < len(dirs)):
-        print(f"[FATAL] idx={idx} out of range for {len(dirs)} targets.")
-        sys.exit(2)
+    if isinstance(idx_or_path, str):
+         root = Path(idx_or_path)
+         if not root.exists():
+              print(f"[FATAL] Path not found: {root}")
+              sys.exit(1)
+         if not root.is_dir():
+              print(f"[FATAL] Path is not a directory: {root}")
+              sys.exit(1)
+    elif isinstance(idx_or_path, int):
+         if not (0 <= idx_or_path < len(dirs)):
+              print(f"[FATAL] idx={idx_or_path} out of range for {len(dirs)} targets.")
+              sys.exit(2)
+         root = Path(dirs[idx_or_path])
+    else:
+         print("Usage: python scripts/04_run_fit_refine.py <INDEX|PATH>")
+         sys.exit(1)
 
-    root = Path(dirs[idx])
     target = Target.from_dir(root)
     print('Target:', target)
-
     global_csv = Path.cwd() / "all_final_candidates.csv"
     run_fit_refine_for_target(target, global_csv)
 
-
 if __name__ == "__main__":
-    idx_str = os.environ.get("SLURM_ARRAY_TASK_ID") or (sys.argv[1] if len(sys.argv) > 1 else None)
-    if idx_str is None:
-        print("Usage: python scripts/04_run_fit_refine.py <index>  # or SLURM_ARRAY_TASK_ID")
-        sys.exit(1)
-    main(int(idx_str))
+     idx_str = os.environ.get("SLURM_ARRAY_TASK_ID") or (sys.argv[1] if len(sys.argv) > 1 else None)
+
+     if idx_str is None:
+          print("Usage: python scripts/04_run_fit_refine.py <index>    # or SLURM_ARRAY_TASK_ID")
+          sys.exit(1)
+     try:
+          main(int(idx_str))
+     except ValueError:
+          main(idx_str)

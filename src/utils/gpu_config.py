@@ -36,13 +36,15 @@ def gpu_config_init(force_cpu=False):
             return False
 
         device_count = torch.mps.device_count()
-        print(f"MPS GPU detected: {device_count} device(s)")
+        device_count = torch.mps.device_count()
+        # print(f"MPS GPU detected: {device_count} device(s)")
+
 
         try:
             device = torch.device("mps")
             test_tensor = torch.randn(100, 100).to(device)
             result = torch.matmul(test_tensor, test_tensor.T)
-            print(f"MPS test successful on: {result.device}")
+         # print(f"MPS test successful on: {result.device}")
             return True
         except Exception as test_err:
             print(f"MPS test failed: {test_err}")

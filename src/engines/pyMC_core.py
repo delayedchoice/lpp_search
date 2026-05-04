@@ -97,6 +97,25 @@ def sample_until_converged(model, max_attempts=3, rhat_threshold=1.1, chains=4, 
                 random_seed=list(range(chains)),
                 nuts_sampler="pymc",
             )
+            # Check convergence
+            summary = az.summary(trace)
+            if (summary["r_hat"] < rhat_threshold).all():
+                print(f"Converged on attempt {attempt}")
+                return trace, attempt
+            print("checking nanas summary", az.summary(trace))
+            print(f"Attempt {attempt} failed to converge.")
+        raise RuntimeError("Model did not converge after multiple attempts.")
+
+
+def prepare_fit_data(time, flux, unc, candidate):
+    """Filter NaN values and calculate cadence. Returns: time, flux, unc, cad."""
+    mask = np.logical_or(np.logical_or(np.isnan(flux), np.isnan(time)), np.isnan(unc))
+    time = time[~mask]
+    unc = unc[~mask]
+    flux = flux[~mask]
+    cad = np.nanpercentile(np.clip(np.diff(np.unique(time))*60.*24., 200/60, 30), 95)
+    return time, flux, unc, float(cad)
+
 def set_up_variables_for_pymc_fit(time, flux, unc, t0, other_pars, type_fn):
     """
     Returns:

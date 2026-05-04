@@ -1,7 +1,8 @@
 # LPP Search Exoplanet Detection Pipeline Dependencies
+
 # Core numerical and data handling
-numpy==2.4.4
-pandas==2.3.3
+numpy>=2.0.0
+pandas>=2.0.0,<2.2.0
 
 # Transit modeling and light curve analysis
 batman-package==2.5.3
@@ -10,9 +11,10 @@ lightkurve==2.6.0
 wotan==1.10
 
 # MCMC sampling
+pymc>=5.28.0
 emcee==3.1.6
 
-# PyTorch GPU Acceleration for Apple Silicon (MPS backend)
+# PyTorch GPU Acceleration (MPS for Apple Silicon)
 torch>=2.0.0
 torchvision>=0.15.0
 torchaudio>=2.0.0
@@ -23,15 +25,14 @@ mpl-axes-aligner==1.3
 corner==2.2.3
 
 # Scientific computing
-scipy==1.17.1
-numba==0.65.1
+scipy>=1.14.0,<1.18.0
 
 # Astronomy toolkit and data access
 astropy==7.2.0
 astroquery==0.4.11
 pyvo==1.8.1
 
-# HTTP requests (for data retrieval)
+# HTTP requests
 requests==2.33.1
 
 # Test dependencies

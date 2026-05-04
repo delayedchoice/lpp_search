@@ -16,3 +16,4 @@ runs/
 target_tic-*
 scripts
 .trash.txt
+**.DS_Store**
