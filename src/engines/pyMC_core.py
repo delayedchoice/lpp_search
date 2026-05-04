@@ -13,64 +13,8 @@ import arviz as az
 from pytensor.graph import Op, Apply
 from pytensor import config as pt_config
 
-import utils.config as con  # keep con.G only
-
-
-
-def extract_summary_dataframe(trace, hdi_prob=0.68):
-    summary = az.summary(trace, hdi_prob=hdi_prob)
-
-    median_dataset = trace.posterior.median(dim=["chain", "draw"])
-    medians = {var: float(median_dataset[var]) for var in median_dataset.data_vars}
-    summary["median"] = medians
-
-    selected_columns = ["mean", "median", "sd", "hdi_16%", "hdi_84%", "r_hat"]
-    return summary[selected_columns]
-
-
-def transit_mask_tensors(t, period, duration, T0, cad_minutes=None):
-    phase = pt.abs(((t - T0 + 0.5 * period) % period) - (0.5 * period))
-    buffer = 0.0
-    if cad_minutes is not None:
-        buffer = cad_minutes / (24.0 * 60.0)
-    return phase < (0.5 * duration + buffer)
-
-
-
-def sample_until_converged(model, max_attempts=3, rhat_threshold=1.1, chains=4,cores=None, mp_context="spawn"):
-    # Get all free random variables in the model
-    
-    cores = min(chains, os.cpu_count() or 1) if cores is None else cores
-
-    free_vars = model.free_RVs
-    if not free_vars:
-        raise ValueError("No free random variables found for sampling.")
-#     print('free vars', free_vars)
-    # Use Metropolis for all free RVs
-#     step = pm.Metropolis(vars=free_vars)
-
-    step = pm.DEMetropolisZ(vars=free_vars)#, target_accept=0.8) 
-
-    for attempt in range(1, max_attempts + 1):
-        print(f"Sampling attempt {attempt}...")
-        run = 2+attempt
-        trace = pm.sample(step=step, draws=5000*(run), tune=2000*(run), chains=chains, cores = cores, 
-            # use a safe, explicit multiprocessing context
-            mp_ctx=mp.get_context(mp_context),
-            # avoid identical RNG streams across chains
-            random_seed=list(range(chains)),
-)
-
-        summary = az.summary(trace)
-        if (summary['r_hat'] < rhat_threshold).all():
-            print(f"Converged on attempt {attempt}")
-            return trace, attempt
-#         print('checking nans trace', trace.posterior['SNR'])
-        print('checking nanas summary', az.summary(trace))
-        print(f"Attempt {attempt} failed to converge.")
-
-    raise RuntimeError("Model did not converge after multiple attempts.")
-
+import src.utils.config as con  # keep con.G only
+from src.utils.gpu_config import gpu_config_init as gpu_config_func
 class BatmanOp(Op):
     itypes = [pt.dvector, pt.dscalar, pt.dscalar, pt.dscalar, pt.dscalar, pt.dscalar, pt.dscalar, pt.dscalar, pt.dscalar, pt.dscalar]
     otypes = [pt.dvector]
@@ -101,22 +45,102 @@ class BatmanOp(Op):
         # For now, return zeros (no gradient)
         return [pt.zeros(inp.shape, dtype=pt_config.floatX) for inp in inputs]
     
+gpu_config_func()  # Enable JAX Metal GPU if available
 
-def prepare_fit_data(time, flux, unc, candidate):
-    mask = np.isnan(time) | np.isnan(flux) | np.isnan(unc)
-    time, flux, unc = time[~mask], flux[~mask], unc[~mask]
 
-    cad = np.nanpercentile(np.clip(np.diff(np.unique(time))*60.*24., 200/60, 30), 95)  # minutes
+def extract_summary_dataframe(trace, hdi_prob=0.68):
+    summary = az.summary(trace, hdi_prob=hdi_prob)
 
-    if candidate.ptype == "Single":
-        # window around t0 using candidate.duration_days as your scale
-        t0 = candidate.t0_days
-        dur = candidate.duration_days
-        idx = np.where(np.abs(time - t0) < (1.0 + dur))
-        return time[idx], flux[idx], unc[idx], cad
+    median_dataset = trace.posterior.median(dim=["chain", "draw"])
+    medians = {var: float(median_dataset[var]) for var in median_dataset.data_vars}
+    summary["median"] = medians
 
-    # periodic uses full series
-    return time, flux, unc, cad
+    selected_columns = ["mean", "median", "sd", "hdi_16%", "hdi_84%", "r_hat"]
+    return summary[selected_columns]
+
+
+def transit_mask_tensors(t, period, duration, T0, cad_minutes=None):
+    phase = pt.abs(((t - T0 + 0.5 * period) % period) - (0.5 * period))
+    buffer = 0.0
+    if cad_minutes is not None:
+        buffer = cad_minutes / (24.0 * 60.0)
+    return phase < (0.5 * duration + buffer)
+
+
+def sample_until_converged(model, max_attempts=3, rhat_threshold=1.1, chains=4, cores=None, mp_context="spawn"):
+    """Get all free random variables in the model.
+    
+    Returns:
+        trace, attempt: Return values on convergence
+    Raises:
+        RuntimeError: If model does not converge after max_attempts
+    """
+    cores = min(chains, os.cpu_count() or 1) if cores is None else cores
+
+    free_vars = model.free_RVs
+    if not free_vars:
+        raise ValueError("No free random variables found for sampling.")
+
+    step = pm.DEMetropolisZ(vars=free_vars)
+
+    for attempt in range(1, max_attempts + 1):
+        print(f"Sampling attempt {attempt}...")
+        run = 2 + attempt
+        with model:
+            trace = pm.sample(
+                step=step,
+                draws=5000*(run),
+                tune=2000*(run),
+                chains=chains,
+                cores=cores,
+                mp_ctx=mp.get_context(mp_context),
+                random_seed=list(range(chains)),
+                nuts_sampler="pymc",
+            )
+def set_up_variables_for_pymc_fit(time, flux, unc, t0, other_pars, type_fn):
+    """
+    Returns:
+        use_time, use_flux, use_unc, per, u1, u2, depth, cad
+
+    cad is a robust effective cadence in MINUTES.
+    """
+    mask = np.logical_or(np.logical_or(np.isnan(flux),  np.isnan(time)),  np.isnan(unc))
+    time = time[~mask]
+    unc  = unc[~mask]
+    flux = flux[~mask]
+
+    cad = np.nanpercentile(np.clip(np.diff(np.unique(time))*60.*24., 200/60, 30), 95) #minutes
+
+    if type_fn == 'Single':
+        dur, ab, depth = other_pars
+        k = np.sqrt(depth)
+        per1 = np.max(time)-np.min(time)
+        per2 = ((3*np.pi/con.G/con.rho_star)** 0.5 ) * (dur/np.pi/(1+k)) ** 1.5
+        per = np.max([per1, per2])
+        print('time difference', np.max(time)-np.min(time), 'checking duration units (must be < 0.5 for days, <12 for hours)', dur)
+        if per<10:
+            per = 27.8
+        
+        indxes = np.where(np.abs(time-t0)<(1.+dur))
+        
+        use_time = np.array(time)[indxes]
+        use_flux = np.array(flux)[indxes]
+        use_unc  = np.array(unc)[indxes]
+    elif type_fn == 'Periodic':
+        per, ab, depth = other_pars
+        use_time = np.array(time)
+        use_flux = np.array(flux)
+        use_unc  = np.array(unc)
+        
+        print(per, type(per))
+        
+        a_smaj_guess = float((con.G * con.rho_star * (per ** 2) / 3 / np.pi) ** (1/3))
+        dur =  min([0.5/3, (float(per) / float(a_smaj_guess * np.pi))])  # days
+
+    u1, u2 = ab
+
+    return use_time, use_flux, use_unc, float(per), u1, u2, float(depth), 1.5*float(dur), cad
+
 
 def median_pytensor(x):
     sorted_x = pt.sort(x)
@@ -143,11 +167,63 @@ def make_windows_from_time_stamps(t, gap_threshold=0.5):
         return np.empty((0, 2))
     gaps = np.diff(t)
     breaks = np.where(gaps > gap_threshold)[0]
+    itypes = [pt.dvector, pt.dscalar, pt.dscalar, pt.dscalar, pt.dscalar, pt.dscalar, pt.dscalar, pt.dscalar, pt.dscalar, pt.dscalar]
+    otypes = [pt.dvector]
+
+    def make_node(self, *inputs):
+        # Convert all inputs to tensors if they aren't already
+        converted_inputs = [pt.as_tensor_variable(inp) for inp in inputs]
+        return Apply(self, converted_inputs, [o() for o in self.otypes])
+
+    def perform(self, node, inputs, outputs):
+        time, t0, per, rp_rs, a_rs, inc, u1, u2, ecc, cad = inputs
+        params = batman.TransitParams()
+
+        params.t0 = float(t0)
+        params.per = float(per)
+        params.rp = float(rp_rs)
+        params.a = float(a_rs)
+        params.inc = float(inc)
+        params.u = [float(u1), float(u2)]
+        params.ecc = float(ecc)
+        params.w = 90.0
+        params.u = [float(u1), float(u2)]
+        params.limb_dark = "quadratic"
+        m = batman.TransitModel(params, time, supersample_factor=4, exp_time=cad/24./60.)
+        outputs[0][0] = m.light_curve(params)
+
+    def grad(self, inputs, g_outputs):
+        # For now, return zeros (no gradient)
+        return [pt.zeros(inp.shape, dtype=pt_config.floatX) for inp in inputs]
+    
+
+        summary = az.summary(trace)
+        if (summary["r_hat"] < rhat_threshold).all():
+            print(f"Converged on attempt {attempt}")
+            return trace, attempt
+        print("checking nanas summary", az.summary(trace))
+        print(f"Attempt {attempt} failed to converge.")
+
+    raise RuntimeError("Model did not converge after multiple attempts.")
+
+
+
+def make_windows_from_time_stamps(t, gap_threshold=0.5):
+    """
+    Convert sorted time stamps (days) into contiguous [start, end] windows.
+    gap_threshold is the minimum gap that splits windows (days).
+    Pick a value larger than cadence and smaller than any real gap.
+    """
+    t = np.asarray(t)
+    t = t[np.isfinite(t)]
+    t = np.sort(t)
+    if t.size == 0:
+        return np.empty((0, 2))
+    gaps = np.diff(t)
+    breaks = np.where(gaps > gap_threshold)[0]
     starts = np.concatenate(([0], breaks + 1))
-    ends   = np.concatenate((breaks, [t.size - 1]))
+    ends    = np.concatenate((breaks, [t.size - 1]))
     return np.column_stack((t[starts], t[ends]))
-
-
 
 
 def pymc_fit_candidate(target, candidate, time, flux, unc, verbose=False, keep_ld_fixed=True):
@@ -169,8 +245,8 @@ def pymc_fit_candidate(target, candidate, time, flux, unc, verbose=False, keep_l
         if Per_in is None:
             raise ValueError("Periodic candidate missing period_days.")
         Per_in = float(Per_in)
-        
-        
+
+
     # Always do data prep first so cad exists
     time, flux, unc, cad = prepare_fit_data(time, flux, unc, candidate)
 
@@ -178,7 +254,7 @@ def pymc_fit_candidate(target, candidate, time, flux, unc, verbose=False, keep_l
     if candidate.depth is None or candidate.duration_days is None:
         raise ValueError("Candidate missing depth or duration_days.")
 
-    # pTdur is your “window scale”. Keep your old convention unless you add a dedicated field later.
+    # pTdur is your "window scale". Keep your old convention unless you add a dedicated field later.
     pTdur = 1.5 * float(candidate.duration_days)
 
     batman_op = BatmanOp()
@@ -192,7 +268,7 @@ def pymc_fit_candidate(target, candidate, time, flux, unc, verbose=False, keep_l
             windows = make_windows_from_time_stamps(np.array(time), gap_threshold=0.5)
             tmp = 0
             for s, e in windows:
-                k_low  = np.ceil((s - T0) / Per_in)
+                k_low   = np.ceil((s - T0) / Per_in)
                 k_high = np.floor((e - T0) / Per_in)
                 tmp += int(max(0, k_high - k_low + 1))
             nobs_est = tmp
@@ -219,7 +295,7 @@ def pymc_fit_candidate(target, candidate, time, flux, unc, verbose=False, keep_l
 
             per = pm.Deterministic("Per", pt.sqrt((3.0 * np.pi) / (con.G * rho_star)) * a_rs ** 1.5)
 
-        else:  # Periodic
+        else:   # Periodic
             Per = Per_in
             if nobs_est >= 3:
                 per = pm.Uniform("Per", lower=max(0.25, Per * 0.99), upper=Per * 1.01)
@@ -242,7 +318,7 @@ def pymc_fit_candidate(target, candidate, time, flux, unc, verbose=False, keep_l
         depth = pm.Deterministic("depth", rp_rs**2)
 
         cosi = pm.Deterministic("cosi", pt.clip(b / a_rs, -1.0 + eps, 1.0 - eps))
-        inc  = pm.Deterministic("inclination", pt.arccos(cosi) * 180.0 / np.pi)
+        inc   = pm.Deterministic("inclination", pt.arccos(cosi) * 180.0 / np.pi)
 
         root = pt.sqrt(pt.clip(1.0 - b**2, eps, 1.0))
         T_dur0 = per / ((a_rs + eps) * np.pi)

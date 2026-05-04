@@ -51,8 +51,6 @@ from tqdm.auto       import tqdm
 import gc
 # from pympler.tracker import SummaryTracker
 
-from src.utils.gpu_config import gpu_config_init as gpu_config_init_func
-gpu_config_init_func()
 import pymc as pm
 import pytensor as PyT
 import pytensor.tensor as pt
@@ -70,7 +68,7 @@ import warnings
 warnings.filterwarnings("ignore")
 display(HTML("<style>.container { width:95% !important; }</style>"))
 
-import src.utils.config as con
+import lpp_search.src.utils.config as con
 # In[32]:
 
 
@@ -2877,7 +2875,6 @@ def sample_until_converged(model, max_attempts=3, rhat_threshold=1.1, chains=4,c
             mp_ctx=mp.get_context(mp_context),
             # avoid identical RNG streams across chains
             random_seed=list(range(chains)),
-                nuts_sampler="pymc",
 )
 
         summary = az.summary(trace)

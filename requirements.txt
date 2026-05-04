@@ -1,7 +1,4 @@
 # LPP Search Exoplanet Detection Pipeline Dependencies
-# Generated from source code analysis
-# Installation: pip install -r requirements.txt
-
 # Core numerical and data handling
 numpy==2.4.4
 pandas==2.3.3
@@ -14,6 +11,11 @@ wotan==1.10
 
 # MCMC sampling
 emcee==3.1.6
+
+# PyTorch GPU Acceleration for Apple Silicon (MPS backend)
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
 
 # Plotting and visualization
 matplotlib==3.10.9
@@ -31,5 +33,6 @@ pyvo==1.8.1
 
 # HTTP requests (for data retrieval)
 requests==2.33.1
+
 # Test dependencies
 pytest==8.3.5
