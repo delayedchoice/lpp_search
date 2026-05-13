@@ -1,6 +1,7 @@
 #!/usr/bin/env python
-import glob
 import os
+
+import glob
 from runpy import run_path
 import sys
 import json
@@ -297,6 +298,7 @@ def run_fit_refine_for_target(target: Target, global_csv_path: Path) -> None:
         raw_pass2 = run_json.get("dt_events_raw_pass2", [])
         pass2_events = [TransitEvent.from_dict(d) for d in raw_pass2] if isinstance(raw_pass2, list) else []
 
+    print("lngth pass2_events: ", len(pass2_events))
 
     # 4) Fit the pass2 events as singles (then later: promote periodic if periodicity emerges)
     single_candidates = []
