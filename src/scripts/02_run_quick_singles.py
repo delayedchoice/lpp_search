@@ -13,7 +13,7 @@ from core.target import Target, PipelineStage
 from stages.search_singles import singles_search, SinglesSearchConfig
 from utils.queue import enqueue
 
-TARGET_GLOB = "./toi_data/target_*"
+TARGET_GLOB = str(PROJECT_ROOT.parent / "toi_data" / "target_*")
 
 
 def _has_merged_data(target: Target, flavour: str) -> bool:

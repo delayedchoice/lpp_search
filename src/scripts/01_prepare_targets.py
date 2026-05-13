@@ -4,6 +4,7 @@ from pathlib import Path
 import glob
 import time as tm
 import pandas as pd
+import sys
 
 
 
@@ -32,12 +33,12 @@ def prepare_one_target(target_dir: Path) -> None:
 
 if __name__ == "__main__":
     t0 = tm.time()
-    target_dirs = sorted(glob.glob("../toi_data/target_*"))  # adjust your path
-    print("num files", len(target_dirs))
+    target_dirs = sorted(glob.glob("../../toi_data/target_*"))  # adjust your path
     for td in target_dirs:
         try:
             prepare_one_target(Path(td))
         except Exception as e:
             print(f"[WARN] {td}: {e}")
     t1 = tm.time()
+    print("num files", len(target_dirs))
     print("time it took:", (t1 - t0)/60, "minutes")

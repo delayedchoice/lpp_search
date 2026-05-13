@@ -48,6 +48,9 @@ class Target:
     last_run_id: Optional[str] = None
     last_candidates_run: Optional[str] = None
 
+    def __repr__(self):
+        return f"Target: {self.ticid}, location: {self.root_dir}"
+        
     def __post_init__(self):
         self.root_dir = Path(self.root_dir)
         if isinstance(self.catalog_row, pd.Series) and len(self.catalog_row) > 0:

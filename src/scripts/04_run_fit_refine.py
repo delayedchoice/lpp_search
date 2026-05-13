@@ -33,7 +33,7 @@ from utils.queue import enqueue
 from stages.search_singles import singles_search, SinglesSearchConfig
 from engines.pyMC_core import pymc_fit_candidate
 
-TARGET_GLOB = "./toi_data/target_*"   # adjust
+TARGET_GLOB = "../../toi_data/target_*"   # adjust
 
 
 # ---------------------------

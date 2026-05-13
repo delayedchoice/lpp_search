@@ -56,14 +56,9 @@ def plot_lc_with_bboxes(lc_object, bboxes, ax=None, epoch=0, **kwargs):
         return ax
 
 def DT_analysis(time, flux, flux_err, confidence, DT_Quite=True, is_flat=True):
-    if DT_Quite:
-        save_stdout, save_stderr = sys.stdout, sys.stderr
-        sys.stdout = open('.trash.txt', 'w'); sys.stderr = open('.trash.txt', 'w')
-    model = dt.DeepTransit(make_LightKurveObject(time, flux, flux_err), is_flat=is_flat)
+    light_kurve = make_LightKurveObject(time, flux, flux_err)
+    model = dt.DeepTransit(light_kurve, is_flat=is_flat)
     bboxes = model.transit_detection(str(con.MODEL_PATH), confidence_threshold=confidence)
-    if DT_Quite:
-        sys.stdout.close(); sys.stderr.close()
-        sys.stdout, sys.stderr = save_stdout, save_stderr
     return bboxes
 
 @dataclass
@@ -84,7 +79,6 @@ def detect_transit_events(time, flux, flux_err, cfg):
     bboxes = DT_analysis(time, flux, flux_err, cfg.confidence, DT_Quite=True, is_flat=True)
     events = []
     
-    print('bboxes', type(bboxes))
     if len(bboxes) == 0:
         return events, bboxes
 
@@ -138,6 +132,7 @@ def singles_search(target, *, cfg=SinglesSearchConfig(), run_1=True,
       - writes a run artifact candidates/run_<run_id>.json with dt_events_raw_<pass_label>
       - returns (event_df, params_df) for compatibility with existing code/tests
     """
+    print(f"target: {target.root_dir}")
     ticid = int(target.ticid)
     total_csv = find_total_csv(target.root_dir, cfg.flavour)  # existing helper
 

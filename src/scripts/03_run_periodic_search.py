@@ -20,7 +20,7 @@ from core.transit_event import TransitEvent
 from utils.singles_periodicity import seed_periods_from_dt_events
 from utils.queue import enqueue
 
-TARGET_GLOB = "./toi_data/target_*"   # adjust as needed
+TARGET_GLOB = "../../toi_data/target_*"   # adjust as needed
 
 def main(idx):
     dirs = sorted(glob.glob(TARGET_GLOB))

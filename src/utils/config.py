@@ -1,2 +1,2 @@
 G = 2941.18330364  # R_s^3 M_s^-1 day^−2
-MODEL_PATH = '/users/malharris/lpp_search/model_TESS.pth'
+MODEL_PATH = '/Users/bobby/dev/python/lpp_search/model_TESS.pth'

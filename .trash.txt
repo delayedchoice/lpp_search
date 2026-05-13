@@ -1,4 +1,0 @@
-Loading Model: /users/malharris/lpp_search/model_TESS.pth
-checking variables first 0.006944415735233633 3336 2
-:319: UserWarning: The total number of progress bar is the upper limit.
-  0%|          | 0/2 [00:00<?, ?it/s] 50%|█████     | 1/2 [00:00<00:00,  2.04it/s]100%|██████████| 2/2 [00:00<00:00,  2.00it/s]3it [00:01,  2.03it/s]                       4it [00:01,  2.60it/s]4it [00:01,  2.35it/s]

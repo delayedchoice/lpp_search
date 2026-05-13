@@ -4,7 +4,7 @@ __pycache__/
 known_toi_data/
 saving_MCMC_plots/
 saving_all_planets.csv
-toi_data/
+toi_data
 *model_TESS.pth
 *final_mdwarf_params.csv
 test/.ipynb_checkpoints/
@@ -12,3 +12,8 @@ test/.trash.txt
 data/dr2_dr3_ticid_final.parquet
 data/dr2_dr3_ticid_final.csv
 runs/
+.DS_Store
+.venv
+**.trash.txt**
+resources
+
