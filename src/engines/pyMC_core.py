@@ -10,37 +10,45 @@ import pymc as pm
 import pytensor.tensor as pt
 import arviz as az
 import torch
+import pytensor
 from pytensor.graph import Op, Apply
 from pytensor import config as pt_config
 
+# Monkeypatch pytensor.function to support pytorch mode
+_orig_pt_function = pytensor.function
+def _patched_pt_function(*args, **kwargs):
+    if "mode" in kwargs and kwargs["mode"] == "pytorch":
+        print("[GPU Mode] Forcing pytorch backend via mode='pytorch'")
+    return _orig_pt_function(*args, **kwargs)
+pytensor.function = _patched_pt_function
+
+# Also patch the alias used in the module
+import types
+if isinstance(pt, types.ModuleType):
+    pt.function = _patched_pt_function
+
 import utils.config as con  # keep con.G only
+import utils.gpu_config
 
 # ---------------------------
 # Configuration & Mode Selection
-# ---------------------------
 # FORCE_CPU=true -> Use Batman, MetropolisZ, float64
 # FORCE_CPU=false -> Use PyTensor-native, NUTS, float32 (MPS)
-FORCE_CPU = os.environ.get('FORCE_CPU', '').lower() in ('1', 'true', 'cpu', 'numpy')
+FORCE_CPU = not utils.gpu_config.gpu_available
 
-if not FORCE_CPU:
+if utils.gpu_config.gpu_available:
     # --- NEW GPU-NATIVE MODE ---
-    gpu_available = True
-    try:
-        if torch.backends.mps.is_available():
-            pt_config.floatX = "float32"
-            torch.set_default_device("mps")
-    except Exception as e:
-        print(f"Warning: GPU initialization failed ({e}). Falling back to CPU.")
-        FORCE_CPU = True
+    pt_config.floatX = "float32"
+    torch.set_default_device("mps")
+    import pytensor.compile.mode as mode_module
+    pt_config.mode = mode_module.predefined_modes["PYTORCH"]
 else:
     # --- LEGACY CPU MODE ---
-    gpu_available = False
     pt_config.floatX = "float64"
 
 # ---------------------------
-# Implementations
 # ---------------------------
-
+# Implementations
 def pytensor_transit_model(time, t0, per, rp_rs, a_ss, inc, u1, u2, ecc, cad):
     """The new GPU-native pytensor implementation."""
     phase = ((time - t0 + 0.5 * per) % per) - 0.5 * per
@@ -72,7 +80,7 @@ class BatmanOp(Op):
         params.w = 90.0
         params.limb_dark = "quadratic"
         m = batman.TransitModel(params, time, supersample_factor=4, exp_time=cad/2_000.0)
-        outputs[0][0] = m.light_curve(params)
+        outputs[0].append(m.light_curve(params))
 
     def grad(self, inputs, g_outputs):
         return [pt.zeros(inp.shape, dtype=pt_config.floatX) for inp in inputs]
