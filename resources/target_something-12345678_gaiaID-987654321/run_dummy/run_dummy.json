@@ -1,0 +1,12 @@
+{
+  "periodic_events_raw_latest": [
+    {
+      "t0_days": 100.0,
+      "period_days": 5.0,
+      "duration_days": 0.2,
+      "depth": 0.01,
+      "n_transits_obs": 10
+    }
+  ],
+  "dt_events_raw_pass2": []
+}

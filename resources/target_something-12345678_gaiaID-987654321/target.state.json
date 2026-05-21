@@ -1,0 +1,7 @@
+{
+  "ticid": 12345678,
+  "gaia_id": "987654321",
+  "data_source": "TGLC",
+  "pipeline_stage": "SEARCHED",
+  "last_candidates_run": "run_dummy"
+}

@@ -1,0 +1,562 @@
+{
+  "run_id": "2026-05-13T13-18-52",
+  "ticid": 439456714,
+  "gaia_id": "2353440974955205632",
+  "total_csv": "../../toi_data/target_tic-439456714_gaiaID-2353440974955205632/target_tic-439456714_gaiaID-2353440974955205632_TGLC_APER_total.csv",
+  "dt_config": {
+    "flavour": "TGLC",
+    "confidence": 0.55
+  },
+  "dt_events_raw_pass1": [
+    {
+      "t0_days": 2123.8180000682387,
+      "duration_days": 0.2062399730760783,
+      "depth": 0.9851034670597522,
+      "snr": 348.7902552480132,
+      "confidence": 0.8288309574127197
+    },
+    {
+      "t0_days": 2131.8083817845036,
+      "duration_days": 0.20061129996928276,
+      "depth": 0.9867469794419307,
+      "snr": 344.5716759934841,
+      "confidence": 0.8165223002433777
+    },
+    {
+      "t0_days": 1385.0379019517752,
+      "duration_days": 0.21162152259680805,
+      "depth": 0.9893184301198394,
+      "snr": 354.8232672730547,
+      "confidence": 0.768718421459198
+    },
+    {
+      "t0_days": 1405.0143185401143,
+      "duration_days": 0.21545027953874468,
+      "depth": 0.9898313324607338,
+      "snr": 358.20430542120266,
+      "confidence": 0.7623518109321594
+    },
+    {
+      "t0_days": 1401.0253827014851,
+      "duration_days": 0.2286046627103506,
+      "depth": 0.9895148384319997,
+      "snr": 368.8594605705686,
+      "confidence": 0.7610001564025879
+    },
+    {
+      "t0_days": 2119.816991591932,
+      "duration_days": 0.20052126067430165,
+      "depth": 0.9867956093829591,
+      "snr": 344.5113189313415,
+      "confidence": 0.7152647376060486
+    },
+    {
+      "t0_days": 2139.780547768328,
+      "duration_days": 0.2301703207887236,
+      "depth": 0.9835768472110575,
+      "snr": 367.89935992023885,
+      "confidence": 0.7116017937660217
+    },
+    {
+      "t0_days": 1389.0365635094338,
+      "duration_days": 0.20684722137014372,
+      "depth": 0.9920943556615829,
+      "snr": 351.78223031262706,
+      "confidence": 0.6854573488235474
+    },
+    {
+      "t0_days": 1393.0135182727222,
+      "duration_days": 0.16949723054114063,
+      "depth": 0.9915819515089125,
+      "snr": 318.2775381081867,
+      "confidence": 0.6848021149635315
+    },
+    {
+      "t0_days": 1397.016949172062,
+      "duration_days": 0.20384136635437328,
+      "depth": 0.9910554232410657,
+      "snr": 348.85116436179965,
+      "confidence": 0.6751829385757446
+    },
+    {
+      "t0_days": 2135.816378148586,
+      "duration_days": 0.20459987219907477,
+      "depth": 0.985098048122323,
+      "snr": 347.3987177915984,
+      "confidence": 0.5934401750564575
+    }
+  ],
+  "status": {
+    "stage": "fit_refine",
+    "state": "done",
+    "finished_at": "2026-05-14T17:06:42.025262"
+  },
+  "seed_periods_days": [
+    0.9969588779829168
+  ],
+  "seed_source": "dt_pass1_singles_periodicity",
+  "seed_generated_at": "2026-05-13T13:18:56.789195",
+  "periodic_events_raw": [
+    {
+      "period_days": 7.991967883776646,
+      "t0_days": 2123.8158330505644,
+      "duration_days": 0.07,
+      "depth": 0.007125192362002162,
+      "snr": 72.49747250061728,
+      "sde": 17.997593947887204,
+      "n_transits_obs": 3,
+      "transit_times_days": [
+        2123.8158330505644,
+        2131.8078009343412,
+        2139.7997688181176
+      ],
+      "source": "BLS",
+      "notes": ""
+    },
+    {
+      "period_days": 15.964361461441937,
+      "t0_days": 2119.834224568617,
+      "duration_days": 0.06,
+      "depth": 0.006258156591472844,
+      "snr": 33.13561131861934,
+      "sde": 10.231268424916273,
+      "n_transits_obs": 2,
+      "transit_times_days": [
+        2119.834224568617,
+        2135.798586030059
+      ],
+      "source": "BLS",
+      "notes": ""
+    }
+  ],
+  "periodic_attempts": [
+    {
+      "attempt_id": "2026-05-13T13-18-56",
+      "flavour": "TGLC",
+      "data_source": "TGLC",
+      "min_snr": 7.0,
+      "min_sde": 10.0,
+      "max_planets": 10,
+      "max_iters": 50,
+      "use_seed_periods": true,
+      "seed_window_frac": 0.02,
+      "seed_grid_size": 400,
+      "power_baseline_kernel": 25,
+      "df_unc": 0.0001,
+      "n_periodic_events": 2,
+      "periodic_events_raw": [
+        {
+          "period_days": 7.991967883776646,
+          "t0_days": 2123.8158330505644,
+          "duration_days": 0.07,
+          "depth": 0.007125192362002162,
+          "snr": 72.49747250061728,
+          "sde": 17.997593947887204,
+          "n_transits_obs": 3,
+          "transit_times_days": [
+            2123.8158330505644,
+            2131.8078009343412,
+            2139.7997688181176
+          ],
+          "source": "BLS",
+          "notes": ""
+        },
+        {
+          "period_days": 15.964361461441937,
+          "t0_days": 2119.834224568617,
+          "duration_days": 0.06,
+          "depth": 0.006258156591472844,
+          "snr": 33.13561131861934,
+          "sde": 10.231268424916273,
+          "n_transits_obs": 2,
+          "transit_times_days": [
+            2119.834224568617,
+            2135.798586030059
+          ],
+          "source": "BLS",
+          "notes": ""
+        }
+      ],
+      "finished_at": "2026-05-13T13:19:22.669199"
+    }
+  ],
+  "periodic_events_raw_latest": [
+    {
+      "period_days": 7.991967883776646,
+      "t0_days": 2123.8158330505644,
+      "duration_days": 0.07,
+      "depth": 0.007125192362002162,
+      "snr": 72.49747250061728,
+      "sde": 17.997593947887204,
+      "n_transits_obs": 3,
+      "transit_times_days": [
+        2123.8158330505644,
+        2131.8078009343412,
+        2139.7997688181176
+      ],
+      "source": "BLS",
+      "notes": ""
+    },
+    {
+      "period_days": 15.964361461441937,
+      "t0_days": 2119.834224568617,
+      "duration_days": 0.06,
+      "depth": 0.006258156591472844,
+      "snr": 33.13561131861934,
+      "sde": 10.231268424916273,
+      "n_transits_obs": 2,
+      "transit_times_days": [
+        2119.834224568617,
+        2135.798586030059
+      ],
+      "source": "BLS",
+      "notes": ""
+    }
+  ],
+  "periodic_attempt_latest_attempt_id": "2026-05-13T13-18-56",
+  "fit_attempts": [
+    {
+      "attempt_id": "2026-05-13T13-19-30",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T13:19:33.048375"
+    },
+    {
+      "attempt_id": "2026-05-13T13-19-33",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T13:19:34.248828"
+    },
+    {
+      "attempt_id": "2026-05-13T13-31-07",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T13:31:10.328952"
+    },
+    {
+      "attempt_id": "2026-05-13T13-31-10",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T13:31:11.546191"
+    },
+    {
+      "attempt_id": "2026-05-13T13-37-04",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T13:37:07.237701"
+    },
+    {
+      "attempt_id": "2026-05-13T13-37-07",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T13:37:08.457150"
+    },
+    {
+      "attempt_id": "2026-05-13T14-52-42",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": true,
+      "finished_at": "2026-05-13T14:53:34.600544"
+    },
+    {
+      "attempt_id": "2026-05-13T14-57-57",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": true,
+      "finished_at": "2026-05-13T14:59:00.914687"
+    },
+    {
+      "attempt_id": "2026-05-13T15-03-32",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": true,
+      "finished_at": "2026-05-13T15:04:04.568668"
+    },
+    {
+      "attempt_id": "2026-05-13T15-39-55",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": true,
+      "finished_at": "2026-05-13T15:40:37.144990"
+    },
+    {
+      "attempt_id": "2026-05-13T20-51-09",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": true,
+      "finished_at": "2026-05-13T20:51:42.089720"
+    },
+    {
+      "attempt_id": "2026-05-13T22-03-14",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:03:17.519351"
+    },
+    {
+      "attempt_id": "2026-05-13T22-03-17",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:03:18.763252"
+    },
+    {
+      "attempt_id": "2026-05-13T22-04-26",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:04:29.007659"
+    },
+    {
+      "attempt_id": "2026-05-13T22-04-29",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:04:30.217603"
+    },
+    {
+      "attempt_id": "2026-05-13T22-12-16",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:12:18.469500"
+    },
+    {
+      "attempt_id": "2026-05-13T22-12-18",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:12:19.701056"
+    },
+    {
+      "attempt_id": "2026-05-13T22-12-28",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:12:30.715477"
+    },
+    {
+      "attempt_id": "2026-05-13T22-12-30",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:12:31.960529"
+    },
+    {
+      "attempt_id": "2026-05-13T22-12-46",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:12:48.625570"
+    },
+    {
+      "attempt_id": "2026-05-13T22-12-48",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:12:49.853168"
+    },
+    {
+      "attempt_id": "2026-05-13T22-13-07",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:13:09.167946"
+    },
+    {
+      "attempt_id": "2026-05-13T22-13-09",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:13:10.388833"
+    },
+    {
+      "attempt_id": "2026-05-13T22-24-24",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:24:26.561799"
+    },
+    {
+      "attempt_id": "2026-05-13T22-24-26",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:24:27.782837"
+    },
+    {
+      "attempt_id": "2026-05-13T22-34-04",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:34:07.128124"
+    },
+    {
+      "attempt_id": "2026-05-13T22-34-07",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:34:08.342050"
+    },
+    {
+      "attempt_id": "2026-05-13T22-35-16",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:35:19.117029"
+    },
+    {
+      "attempt_id": "2026-05-13T22-35-19",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:35:20.316805"
+    },
+    {
+      "attempt_id": "2026-05-13T22-38-44",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:38:46.228062"
+    },
+    {
+      "attempt_id": "2026-05-13T22-38-46",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-13T22:38:47.457717"
+    },
+    {
+      "attempt_id": "2026-05-14T07-58-13",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-14T07:58:15.938536"
+    },
+    {
+      "attempt_id": "2026-05-14T07-58-15",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-14T07:58:17.191659"
+    },
+    {
+      "attempt_id": "2026-05-14T08-02-17",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-14T08:02:19.673287"
+    },
+    {
+      "attempt_id": "2026-05-14T08-02-19",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-14T08:02:20.891021"
+    },
+    {
+      "attempt_id": "2026-05-14T08-17-56",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-14T08:17:58.496312"
+    },
+    {
+      "attempt_id": "2026-05-14T08-17-58",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-14T08:17:59.677036"
+    },
+    {
+      "attempt_id": "2026-05-14T08-24-02",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-14T08:24:04.882123"
+    },
+    {
+      "attempt_id": "2026-05-14T08-24-04",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-14T08:24:06.156331"
+    },
+    {
+      "attempt_id": "2026-05-14T08-30-20",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-14T08:30:22.459042"
+    },
+    {
+      "attempt_id": "2026-05-14T08-30-22",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-14T08:30:23.651196"
+    },
+    {
+      "attempt_id": "2026-05-14T08-31-10",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-14T08:31:12.163496"
+    },
+    {
+      "attempt_id": "2026-05-14T08-31-12",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-14T08:31:13.349869"
+    },
+    {
+      "attempt_id": "2026-05-14T08-32-14",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-14T08:32:16.600378"
+    },
+    {
+      "attempt_id": "2026-05-14T08-32-16",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-14T08:32:17.864204"
+    },
+    {
+      "attempt_id": "2026-05-14T15-27-47",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-14T15:27:50.793137"
+    },
+    {
+      "attempt_id": "2026-05-14T15-27-50",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-14T15:27:52.001856"
+    },
+    {
+      "attempt_id": "2026-05-14T17-06-38",
+      "candidate_id": "Periodic|P=7.991968|t0=2123.81583",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-14T17:06:40.828016"
+    },
+    {
+      "attempt_id": "2026-05-14T17-06-40",
+      "candidate_id": "Periodic|P=15.964361|t0=2119.83422",
+      "ptype": "Periodic",
+      "ok": false,
+      "finished_at": "2026-05-14T17:06:42.018762"
+    }
+  ]
+}
