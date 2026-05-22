@@ -110,7 +110,7 @@ class BatmanOp(Op):
     
 
 def prepare_fit_data(time, flux, unc, candidate):
-    mask = np.isnan(time) | np.isnan(flux) | np.isnan(unc)
+    mask = np.isnan(time) | np.isnan(flux) #| np.isnan(unc)
     time, flux, unc = time[~mask], flux[~mask], unc[~mask]
 
     cad = np.nanpercentile(np.clip(np.diff(np.unique(time))*60.*24., 200/60, 30), 95)  # minutes
@@ -118,7 +118,7 @@ def prepare_fit_data(time, flux, unc, candidate):
     if candidate.ptype == "Single":
         # window around t0 using candidate.duration_days as your scale
         t0 = candidate.t0_days
-        dur = candidate.duration_days
+        dur = candidate.duration_dayss
         idx = np.where(np.abs(time - t0) < (1.0 + dur))
         return time[idx], flux[idx], unc[idx], cad
 
@@ -279,7 +279,7 @@ def pymc_fit_candidate(target, candidate, time, flux, unc, verbose=False, keep_l
 
         else:  # Periodic
             Per = Per_in
-            if nobs_est >= 3:
+            if fold_this:
                 per = pm.Uniform("Per", lower=max(0.25, Per * 0.99), upper=Per * 1.01)
                 a_rs = pm.Uniform("a_rs", lower=1.0, upper=300.0)
                 # fold_this = True
@@ -327,30 +327,12 @@ def pymc_fit_candidate(target, candidate, time, flux, unc, verbose=False, keep_l
         SNR_val = pt.switch(pt.gt(N_tran, 0), pt.sqrt(N_tran) * depth / sigs, 0)
         SNR_clipped = pt.clip(SNR_val, 0, 1e4)
         SNR_final = pt.where(pt.eq(SNR_clipped, 1e4), 1, SNR_clipped)
-        if not fold_this:
-            pm.Deterministic("SNR", SNR_final)
+        # if not fold_this:
+        pm.Deterministic("SNR", SNR_final)
 
         norm = pm.Deterministic("norm", median_pytensor(out_flux))
 
         if fold_this:
-            # folded_phase = ((time - T0 + 0.5 * Per_in) % Per_in) - (0.5 * Per_in)
-            # sort_indx = np.argsort(folded_phase)
-
-            # phase = folded_phase[sort_indx]
-            
-            # window = min(0.5, 3*pTdur + 0.1*Per_in)
-            # use_index = np.abs(phase) < window
-
-            # dt_minutes_min = np.nanpercentile(np.diff(np.unique(np.sort(time))), 5) * 24.0 * 60.0
-            # p_cad = float(np.clip(dt_minutes_min, 0.2, 60.0))
-
-
-            # t_fit = phase[use_index] + T0
-            # f_fit = flux[use_index]
-            # u_fit = unc[use_index]
-            
-
-
             p_flux_model = batman_op(t_fit, t0, per, rp_rs, a_rs, inc, u1, u2, ecc, cad)
             pm.Normal("obs", mu=p_flux_model * norm, sigma=u_fit,observed=f_fit)
         else:

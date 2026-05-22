@@ -35,14 +35,50 @@ def match_logg_and_teff_for_LDC(df: pd.DataFrame) -> pd.DataFrame:
     df['aLSM'] = a; df['bLSM'] = b
     return df  # [
 
-def get_catalog_info(ticid: int, rtrn_df: bool=False) -> pd.DataFrame | tuple:
-    mdwarfs = pd.read_csv(con.MDWARF_CATALOG, iterator=True, chunksize=100000)
-    new_df = pd.concat([c[c['TICID'].astype(int) == int(ticid)] for c in mdwarfs]).reset_index(drop=True)
+# def get_catalog_info(ticid: int, rtrn_df: bool=False) -> pd.DataFrame | tuple:
+#     mdwarfs = pd.read_csv(con.MDWARF_CATALOG, iterator=True, chunksize=100000)
+#     new_df = pd.concat([c[c['TICID'].astype(int) == int(ticid)] for c in mdwarfs]).reset_index(drop=True)
+#     new_df = match_logg_and_teff_for_LDC(new_df)
+#     return new_df if rtrn_df else (
+#         new_df[['aLSM','bLSM']].values[0].astype(float),
+#         float(new_df['Mass']), float(new_df['Rad'])
+#     )  
+
+def get_catalog_info(ticid: int, rtrn_df: bool=False):
+    ticid = int(ticid)
+
+    # keep all columns; just make dtype inference consistent and avoid warnings
+    mdwarfs = pd.read_csv(
+        con.MDWARF_CATALOG,
+        chunksize=100000,
+        low_memory=False
+    )
+
+    hits = []
+    for c in mdwarfs:
+        # robust TICID parsing (won't crash on blanks/strings)
+        tic_col = pd.to_numeric(c["TICID"], errors="coerce").astype("Int64")
+        m = tic_col == ticid
+        if m.any():
+            hits.append(c.loc[m])
+            break  # TICID should be unique; stop scanning
+
+    if not hits:
+        raise KeyError(f"TICID {ticid} not found in MDWARF_CATALOG")
+
+    new_df = pd.concat(hits, ignore_index=True)
     new_df = match_logg_and_teff_for_LDC(new_df)
-    return new_df if rtrn_df else (
-        new_df[['aLSM','bLSM']].values[0].astype(float),
-        float(new_df['Mass']), float(new_df['Rad'])
-    )  
+
+    if rtrn_df:
+        return new_df
+
+    # correct scalar extraction
+    aLSM = float(new_df["aLSM"].iloc[0])
+    bLSM = float(new_df["bLSM"].iloc[0])
+    mass = float(new_df["Mass"].iloc[0])
+    rad  = float(new_df["Rad"].iloc[0])
+
+    return (np.array([aLSM, bLSM], dtype=float), mass, rad)
 
 # ---- basic cleaning & flattening ----
 def remove_outliers(time, flux, sigma_lower=8.0, sigma_upper=3.0, **kwargs):
@@ -127,7 +163,7 @@ def extract_data_from_fits_files(fitsFile, PL="", sector=0):
     return df  
 
 def get_data(ticid_directory, flux_type="APER_", PL="TGLC", verbose=False, catalog_df=False):
-    files = sorted(glob.glob(f"{ticid_directory}/*_sector*.csv"))
+    files = sorted([fil for fil in glob.glob(f"{ticid_directory}/*_sector*.csv") if '_flat' not in fil])
     all_t, all_f, all_fe, all_flat, all_flat_fe, all_trend = [], [], [], [], [], []
 
     all_bkg, all_cx, all_cy, all_q = [], [], [], []
@@ -147,6 +183,7 @@ def get_data(ticid_directory, flux_type="APER_", PL="TGLC", verbose=False, catal
         df2 = df.iloc[mask].copy()
 
         t, f, fe = df2['TIME'].to_numpy(), df2[flux_col].to_numpy(), np.array(ferr)[mask]
+
         flat, trend = (flatten_lc(t, f) if isinstance(catalog_df, bool) else flatten_lc(t, f, catalog_df=catalog_df))
         flat_err = np.full(len(flat), np.std(flat))
 
@@ -179,6 +216,7 @@ def get_data(ticid_directory, flux_type="APER_", PL="TGLC", verbose=False, catal
             plt.figure(figsize=(20,5)); plt.scatter(time, flux, s=3); plt.plot(t, trend, 'k')
             plt.figure(figsize=(20,5)); plt.scatter(t, flat, s=3); plt.show()
         all_t.extend(t); all_f.extend(f); all_fe.extend(fe);
+
         all_flat.extend(flat); all_flat_fe.extend(flat_err); all_trend.extend(trend)
     if not all_t:
         return
@@ -196,8 +234,11 @@ def get_data(ticid_directory, flux_type="APER_", PL="TGLC", verbose=False, catal
         "CENTROID_Y": np.array(all_cy)[idx],
         "QUALITY": np.array(all_q)[idx],
     })
+
+    out_df = out.drop_duplicates()
+
     outname = f"{ticid_directory}/{os.path.basename(ticid_directory)}_{PL}_{flux_type}total.csv"
-    out.to_csv(outname, index=False)
+    out_df.to_csv(outname, index=False)
     return out  
 
 # ---- DataPrep class ----

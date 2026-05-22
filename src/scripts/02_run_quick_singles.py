@@ -46,7 +46,7 @@ def main(idx):
         return
 
 
-    cfg = SinglesSearchConfig(flavour=t.data_source.value, confidence=0.55, plot_events=False, verbose=False)
+    cfg = SinglesSearchConfig(flavour=t.data_source.value, confidence=0.5, plot_events=False, verbose=False)
     # Optional: if you want consistent per-run artifacts, uncomment:
     run_id = t.new_run_id()
 

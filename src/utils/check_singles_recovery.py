@@ -35,13 +35,13 @@ def check_singles_against_periodic_candidate(
 
     P = float(periodic.period_days)
     T0 = float(periodic.t0_days)
-    duration = periodic.duration_days
+    duration = float(periodic.duration_days)
 
     if duration is None:
         raise ValueError("Periodic candidate must have duration_days")
 
     if tol is None:
-        tol = 0.5 * duration
+        tol =  duration*2
 
     singles_t0 = np.array([c.t0_days for c in singles], dtype=float)
 

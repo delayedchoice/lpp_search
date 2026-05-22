@@ -52,7 +52,7 @@ class Target:
     _obs_windows: Optional[np.ndarray] = field(default=None, init=False, repr=False)
     def __post_init__(self):
         self.root_dir = Path(self.root_dir)
-        print(f'root directory: {self.root_dir}')
+        # print(f'root directory: {self.root_dir}')
         if isinstance(self.catalog_row, pd.Series) and len(self.catalog_row) > 0:
             self._catalog = {str(k): (None if pd.isna(v) else v) for k, v in self.catalog_row.items()}
             for col, val in self._catalog.items():
@@ -98,7 +98,7 @@ class Target:
             print('target state path exists')
             return
         pl = json.loads(self.state_path.read_text())
-        print(pl)
+        # print(pl)
 
         # enums
         try:

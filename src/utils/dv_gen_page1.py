@@ -221,7 +221,7 @@ def creating_broken_axes_plots_for_DV_report_min_plot(time, flux, err, binned_ti
 
 
     
-    d = .02 # how big to make the diagonal lines in axes coordinates
+    d = 0.02 # how big to make the diagonal lines in axes coordinates
     kwargs = dict(transform=axes[0].transAxes, color='k', clip_on=False)
 
 #     for lll in split_times:
@@ -309,9 +309,11 @@ def creating_first_DV_report_page(target, planet_df, intransit=[]):
 
     
     catalog_df = target._catalog
+
     try:
-        u1 = float(catalog_df.aLSM)
-        u2 = float(catalog_df.bLSM)
+        u1 = float(catalog_df['aLSM'])
+        u2 = float(catalog_df['bLSM'])
+
     except Exception:
         u1, u2 = np.nan, np.nan
     
@@ -336,7 +338,7 @@ def creating_first_DV_report_page(target, planet_df, intransit=[]):
     min_diff_time_arrays = min(diff_time_arrays)
     ratios = diff_time_arrays/min_diff_time_arrays
             
-    fig0 = plt.figure(figsize=(8.5, 11),constrained_layout=True,dpi=100)
+    fig0 = plt.figure(figsize=(8.5, 11), constrained_layout=True,dpi=100)
     gs = fig0.add_gridspec(1,2,width_ratios=[4.25, 1], wspace = 0.1) #create grid for subplots - makes it easier to assign where each plot goes
     
     
@@ -366,11 +368,11 @@ def creating_first_DV_report_page(target, planet_df, intransit=[]):
     subplot+=1
     
     
-    ymin2 = np.nanmin([np.percentile(flux, 0.25)])*0.95 
+    ymin2 = np.nanmin([np.percentile(flux, 2)])*0.99
     #,1.-(max(planet_df['Depth']))]) #define y-axis limits by percentages to avoid using es 
-    ymax2 = np.percentile(flux,99.5)*1.05
+    ymax2 = np.percentile(flux,98)*1.01
     delta_y2 = np.abs(ymax2-ymin2)
-    ymin2 = ymin2-(delta_y2*.05) #make sure ymin allows for all data        
+    ymin2 = ymin2-(delta_y2*.01) #make sure ymin allows for all data        
 
     per_planets_df = planet_df[planet_df['Ptype']=='Periodic']
     print('planet df', planet_df)
@@ -391,6 +393,8 @@ def creating_first_DV_report_page(target, planet_df, intransit=[]):
             for indx, planet in per_planets_df.iterrows():
 
                 if not _finite(planet.Rad_p, u1, u2):
+                    print('do we get here', planet.Rad_p, u1, u2)
+
                     continue
                 elif not _finite(planet.Cosi, planet.Semi_Maj):
                     planet.Cosi = 90
@@ -553,6 +557,7 @@ def creating_first_DV_report_page(target, planet_df, intransit=[]):
             if planet["Ptype"] == "Single":
                 epochs = np.array([planet["T0"]], dtype=float)
             else:
+                # print('checking ', min_vals, max_vals, planet["T0"], planet["Period"])
                 epochs = find_t0_vals_within_time(min_vals, max_vals, planet["T0"], planet["Period"])
 #     print('should be sorted times', min_t, epochs, max_t)
 

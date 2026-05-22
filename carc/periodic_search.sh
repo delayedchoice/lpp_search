@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-#SBATCH -J initial_search_w_plots
-#SBATCH -o ./SLURM_output/initial_search_w_plots%j.txt
+#SBATCH -J periodic_searches_
+#SBATCH -o ./SLURM_output/periodic_searches_%j.txt
 
 #SBATCH --account=2016394
 #SBATCH --nodes=1
@@ -13,12 +13,12 @@
 #SBATCH --mail-type BEGIN
 #SBATCH --mail-type END
 #SBATCH --mail-type FAIL
-#SBATCH --array=0-157  # for 158 files
+#SBATCH --array=0-123 # for 124 files
 
-cd ../src
+cd ../src/scripts
 module load miniconda3
 source activate /users/malharris/miniconda3/envs/envRunningInJupyter
 
 # Run your Python script with the identifier as an argument
-python Executing_code_part_2_init_single_search.py $SLURM_ARRAY_TASK_ID
+python 03_run_periodic_search.py $SLURM_ARRAY_TASK_ID
 

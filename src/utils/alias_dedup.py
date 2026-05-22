@@ -166,12 +166,16 @@ def _winner_key(c: PlanetCandidate) -> Tuple:
     """
     sig = 1 if _signal_not_zero(c) else 0
     fit = 1 if getattr(c, "fit_is_current", False) else 0
+
     rhat = _max_rhat(c)
-    rhat_score = 0.0 if rhat is None else -float(rhat)
+    # rhat_ok: 1 if acceptable / 0 if not (tune threshold)
+    rhat_ok = 1
+    if rhat is not None and float(rhat) > 1.05:
+        rhat_ok = 0
     snr = _snr_med(c)
     P = _period(c)
     per_score = 0.0 if P is None else -float(P)  # shorter is better as tie-breaker
-    return (sig, fit, rhat_score, snr, per_score)
+    return (sig, fit, rhat_ok, snr, per_score)
 
 
 # ---------- main entrypoint ----------
@@ -227,6 +231,7 @@ def alias_dedup_periodic_candidates(
 
             # 2) Fallback: harmonic period relation + ephemeris-phase check + depth consistency
             if not _depth_consistent(a, b, ratio_max=depth_ratio_max):
+                print('not consistent depth')
                 continue
 
             Pa, Pb = _period(a), _period(b)

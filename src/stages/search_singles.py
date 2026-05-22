@@ -56,6 +56,7 @@ def plot_lc_with_bboxes(lc_object, bboxes, ax=None, epoch=0, **kwargs):
         return ax
 
 def DT_analysis(time, flux, flux_err, confidence, DT_Quite=True, is_flat=True):
+    # print('not even here?')
     if DT_Quite:
         save_stdout, save_stderr = sys.stdout, sys.stderr
         sys.stdout = open('.trash.txt', 'w'); sys.stderr = open('.trash.txt', 'w')
@@ -84,7 +85,7 @@ def detect_transit_events(time, flux, flux_err, cfg):
     bboxes = DT_analysis(time, flux, flux_err, cfg.confidence, DT_Quite=True, is_flat=True)
     events = []
     
-    print('bboxes', type(bboxes))
+    print('bboxes', type(bboxes), bboxes)
     if len(bboxes) == 0:
         return events, bboxes
 
@@ -144,6 +145,7 @@ def singles_search(target, *, cfg=SinglesSearchConfig(), run_1=True,
     df = pd.read_csv(total_csv).dropna(subset=["FLUX"])
     total_time = df["TIME"].to_numpy(dtype=float)
     total_flux = df["FLUX"].to_numpy(dtype=float)
+
 
     if "FLUX_ERR" in df.columns:
         total_flux_err = df["FLUX_ERR"].to_numpy(dtype=float)

@@ -198,13 +198,17 @@ def fit_and_attach(target: Target, cand: PlanetCandidate, time, flux, unc, run_p
     """
     Runs PyMC fit and attaches *full summary stats* to the candidate.
     """
+    print('trying fit')
     attempt_id = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     upsert_run_json(run_path, {"status": {"stage": "pymc_fit", "state": "running", "attempt_id": attempt_id}})
 
     summary_df, ok, _ = pymc_fit_candidate(target, cand, time, flux, unc, verbose=verbose)
 
+    print('ok? ', ok)
+
     if ok and summary_df is not None:
-        cand.pymc_summary = summary_df.to_dict()
+        cand.pymc_summary = summary_df.to_dict(orient="index")
+        print('candidate pymc summary', cand.pymc_summary)
         cand.mark_fitted()
         print('summary')
         print(summary_df)
@@ -217,7 +221,7 @@ def fit_and_attach(target: Target, cand: PlanetCandidate, time, flux, unc, run_p
 
         raw_depth = _summary_median(cand, "depth", fallback=cand.depth)
         cand.depth = normalize_depth_to_fractional(raw_depth)
-        cand.rp_rs = _summary_median(cand, "rp_rs", fallback=None)    
+        cand.rp_rs = _summary_median(cand, "rp_rs", fallback=cand.period_days)    
         cand.cosi = _summary_median(cand, "cosi", fallback=None)    
         cand.a_smaj = _summary_median(cand, "a_rs", fallback=None)    
 
@@ -237,6 +241,7 @@ def fit_and_attach(target: Target, cand: PlanetCandidate, time, flux, unc, run_p
 
 
 def finalize_pass1_singles_only(target, run_path, run_json):
+    # print('only pass1 singles')
     raw_pass1 = run_json.get("dt_events_raw_pass1", [])
     pass1_events = [TransitEvent.from_dict(d) for d in raw_pass1] if isinstance(raw_pass1, list) else []
 
@@ -248,6 +253,7 @@ def finalize_pass1_singles_only(target, run_path, run_json):
     unc = df["FLUX_ERR"].to_numpy(float) if "FLUX_ERR" in df.columns else np.full_like(flux, np.nanstd(flux))
 
     single_candidates = []
+    print(len(pass1_events))
     for ev in pass1_events:
         sc = PlanetCandidate(
             ptype="Single",
@@ -268,8 +274,8 @@ def _summary_median(cand, varname, fallback=None):
     Expected structure: cand.pymc_summary["Per"]["median"], etc.
     """
     try:
-        d = cand.pymc_summary.get(varname, None)
-        if isinstance(d, dict) and "median" in d:
+        d = cand.pymc_summary[varname]
+        if isinstance(d, dict) and "median" in d.keys():
             return float(d["median"])
     except Exception:
         pass
@@ -323,19 +329,28 @@ def run_fit_refine_for_target(target: Target, global_csv_path: Path) -> None:
 
     periodic_raw = run_json.get("periodic_events_raw_latest", None)
 
+    dt1_raw = run_json.get("dt_events_raw_pass1", None)
 
 
     if periodic_raw is None:
+        print('no periodic')
+
         attempts = run_json.get("periodic_attempts", [])
         if attempts:
             periodic_raw = attempts[-1].get("periodic_events_raw", [])
 
     if periodic_raw is None:
-        pass1_events, single_candidates = finalize_pass1_singles_only(target, run_path, run_json, global_csv_path)
+        print('no periodic')
+        
+        if dt1_raw is None:
+            print('no singles events')
+            attempts = run_json.get("periodic_attempts", [])
+
+        pass1_events, single_candidates = finalize_pass1_singles_only(target, run_path, run_json)
         
         # return
     elif isinstance(periodic_raw, list) and len(periodic_raw) == 0:
-        pass1_events, single_candidates = finalize_pass1_singles_only(target, run_path, run_json, global_csv_path)
+        pass1_events, single_candidates = finalize_pass1_singles_only(target, run_path, run_json)
 
     periodic_candidates = []
 
@@ -431,8 +446,10 @@ def run_fit_refine_for_target(target: Target, global_csv_path: Path) -> None:
         print(f"[DEBUG] pass2_events: {len(pass2_events)}")
 
 
-        time_min = float(time.min())
-        time_max = float(time.max())
+        print('time', len(time))
+
+        time_min = float(min(time))
+        time_max = float(max(time))
 
         # 4) Fit the pass2 events as singles (then later: promote periodic if periodicity emerges)
         single_candidates = []
@@ -487,8 +504,8 @@ def run_fit_refine_for_target(target: Target, global_csv_path: Path) -> None:
 
     
 
-    time_min = float(time.min())
-    time_max = float(time.max())
+    # time_min = float(time.min())
+    # time_max = float(time.max())
     # final_candidates = consume_singles_under_periodics(final_candidates, time_min, time_max)
 
     # final_defaults = [c for c in final_candidates if c.default == True and c.fit_is_current]
@@ -511,7 +528,7 @@ def main(idx: int) -> None:
 
     root = Path(dirs[idx])
     target = Target.from_dir(root)
-    print('Target:', target)
+    # print('Target:', target)
 
     global_csv = Path.cwd() / "all_final_candidates.csv"
     run_fit_refine_for_target(target, global_csv)
@@ -519,6 +536,7 @@ def main(idx: int) -> None:
 
 if __name__ == "__main__":
     idx_str = os.environ.get("SLURM_ARRAY_TASK_ID") or (sys.argv[1] if len(sys.argv) > 1 else None)
+    print('indx string', idx_str)
     if idx_str is None:
         print("Usage: python scripts/04_run_fit_refine.py <index>  # or SLURM_ARRAY_TASK_ID")
         sys.exit(1)
