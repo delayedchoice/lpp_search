@@ -9,8 +9,8 @@ batman-package==2.4.9
 #deep-transit==0.1.0
 deep-transit @ git+https://github.com/delayedchoice/Deep-Transit@46a0bf4
 #Deep-Transit==0.1.0
-torch==2.6.0
-torchvision==0.21.0 
+#torch==2.6.0
+#torchvision==0.21.0 
 #@ git+https://github.com/owner/repo@41b95ec
 lightkurve==2.5.0
 #lightkurve==2.5.0
