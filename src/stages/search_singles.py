@@ -57,14 +57,8 @@ def plot_lc_with_bboxes(lc_object, bboxes, ax=None, epoch=0, **kwargs):
 
 def DT_analysis(time, flux, flux_err, confidence, DT_Quite=True, is_flat=True):
     # print('not even here?')
-    if DT_Quite:
-        save_stdout, save_stderr = sys.stdout, sys.stderr
-        sys.stdout = open('.trash.txt', 'w'); sys.stderr = open('.trash.txt', 'w')
     model = dt.DeepTransit(make_LightKurveObject(time, flux, flux_err), is_flat=is_flat)
     bboxes = model.transit_detection(str(con.MODEL_PATH), confidence_threshold=confidence)
-    if DT_Quite:
-        sys.stdout.close(); sys.stderr.close()
-        sys.stdout, sys.stderr = save_stdout, save_stderr
     return bboxes
 
 @dataclass

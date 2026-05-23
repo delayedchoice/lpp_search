@@ -634,23 +634,9 @@ def DT_analysis(time, flux, flux_err, confidence, DT_Quite=True, is_flat = True)
     
 #     confidence = 1-np.exp(-0.15*snr)
     print('time len', len(time))
-    if DT_Quite == True:
-        save_stdout = sys.stdout
-        save_stderr = sys.stderr
-        sys.stdout = open('.trash.txt', 'w')
-        sys.stderr = open('.trash.txt', 'w')
-
-        # do check for transits with DT
-        DT_model = dt.DeepTransit(make_LightKurveObject(time, flux, flux_err),  is_flat=is_flat)
-        bboxes = DT_model.transit_detection(model_path, confidence_threshold=confidence)
-
-        sys.stdout = save_stdout
-        sys.stderr = save_stderr
-
-    else:
-        # do check for transits with DT
-        DT_model = dt.DeepTransit(make_LightKurveObject(time, flux, flux_err), is_flat=is_flat)
-        bboxes = DT_model.transit_detection(model_path, confidence_threshold=confidence)
+    # do check for transits with DT
+    DT_model = dt.DeepTransit(make_LightKurveObject(time, flux, flux_err), is_flat=is_flat)
+    bboxes = DT_model.transit_detection(model_path, confidence_threshold=confidence)
 
         # if only 1 or 0 boxes were found, break the loop and continue
 
